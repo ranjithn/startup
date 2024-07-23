@@ -1,1 +1,1 @@
-# startup
+# Startup scripts
