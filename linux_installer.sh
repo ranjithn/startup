@@ -49,9 +49,9 @@ source_config() {
 
 # Set GitHub variables for remote execution
 if [ "$LOCAL_MODE" = false ]; then
-    export GITHUB_USER="${GITHUB_USER:-yourusername}"
+    export GITHUB_USER="${GITHUB_USER:-ranjithn}"
     export GITHUB_REPO="${GITHUB_REPO:-startup}"
-    export GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+    export GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
     export RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}"
 fi
 

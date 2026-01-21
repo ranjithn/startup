@@ -13,9 +13,9 @@ export DOTFILES_DIR="${HOME}/.dotfiles"
 export BACKUP_DIR="${HOME}/.dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
 # GitHub raw content base URL for fetching dotfiles
-export GITHUB_USER="${GITHUB_USER:-yourusername}"
+export GITHUB_USER="${GITHUB_USER:-ranjithn}"
 export GITHUB_REPO="${GITHUB_REPO:-startup}"
-export GITHUB_BRANCH="${GITHUB_BRANCH:-main}"
+export GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 export RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}"
 
 # Package manager detection
