@@ -7,6 +7,7 @@ A collection of modular installer scripts to set up development environments on 
 - **Modular Design**: Easy to extend with new tools and platforms
 - **Remote Execution**: Run directly from GitHub without cloning
 - **Local Execution**: Can also be run from a local clone
+- **Re-entrant**: Safe to run multiple times - only installs/updates what's needed
 - **Good Defaults**: Comes with sensible configurations and popular plugins
 - **Multiple Package Managers**: Supports apt, dnf, yum, and pacman
 
@@ -149,6 +150,22 @@ After running the installer:
 3. **Tmux**: Press `Ctrl+a` then `I` to install plugins
 4. **Zsh**: Run `p10k configure` to customize your prompt
 5. If your default shell didn't change: `chsh -s $(which zsh)`
+
+## Re-running the Installer
+
+The installer is **fully re-entrant** and safe to run multiple times:
+
+- ✅ **Already installed tools** will be skipped (with success messages)
+- ✅ **Existing configurations** are preserved unless they're missing installer markers
+- ✅ **Backups are created** before overwriting any existing dotfiles
+- ✅ **Failed operations** won't stop the entire script
+- ✅ **Plugins** are only reinstalled when configurations are updated
+
+**Example scenarios:**
+- Want to add new plugins? Just update the repo and re-run the installer
+- Accidentally deleted .vimrc? Re-run to restore it
+- Installing on a new machine? Full installation
+- Running on an existing setup? Quick verification and updates only
 
 ## Customization
 

@@ -15,19 +15,33 @@ install_tmux() {
 configure_tmux() {
     log_info "Configuring Tmux..."
     
-    # Backup existing .tmux.conf
-    backup_file "${HOME}/.tmux.conf"
-    
     # Install TPM (Tmux Plugin Manager)
     local tpm_path="${HOME}/.tmux/plugins/tpm"
     if [ ! -d "$tpm_path" ]; then
         log_info "Installing TPM (Tmux Plugin Manager)..."
-        git clone https://github.com/tmux-plugins/tpm "$tpm_path"
+        git clone https://github.com/tmux-plugins/tpm "$tpm_path" 2>/dev/null || log_warning "TPM installation failed"
+    else
+        log_success "TPM is already installed"
     fi
     
-    # Download and install .tmux.conf
-    if [ -n "$RAW_BASE_URL" ]; then
-        curl -fsSL "${RAW_BASE_URL}/dotfiles/.tmux.conf" -o "${HOME}/.tmux.conf"
+    # Check if .tmux.conf needs updating
+    local needs_update=false
+    if [ ! -f "${HOME}/.tmux.conf" ]; then
+        needs_update=true
+    elif [ -n "$RAW_BASE_URL" ]; then
+        # Check if managed by this installer (contains tpm marker)
+        if ! grep -q "tmux-plugins/tpm" "${HOME}/.tmux.conf" 2>/dev/null; then
+            needs_update=true
+        fi
+    fi
+    
+    if [ "$needs_update" = true ]; then
+        # Backup existing .tmux.conf
+        backup_file "${HOME}/.tmux.conf"
+        
+        # Download and install .tmux.conf
+        if [ -n "$RAW_BASE_URL" ]; then
+            curl -fsSL "${RAW_BASE_URL}/dotfiles/.tmux.conf" -o "${HOME}/.tmux.conf"
     else
         # Fallback: create a basic .tmux.conf if running locally
         cat > "${HOME}/.tmux.conf" << 'EOF'
@@ -93,15 +107,17 @@ set -g @plugin 'tmux-plugins/tmux-yank'
 # Initialize TPM (keep this line at the very bottom)
 run '~/.tmux/plugins/tpm/tpm'
 EOF
+        fi
+        log_success "Tmux configured successfully"
+    else
+        log_success "Tmux is already configured (skipping)"
     fi
     
-    # Install plugins
-    log_info "Installing Tmux plugins..."
-    if [ -d "$tpm_path" ]; then
-        "${tpm_path}/bin/install_plugins" 2>/dev/null || true
+    # Install/update plugins if TPM is present and config was updated
+    if [ -d "$tpm_path" ] && [ "$needs_update" = true ]; then
+        log_info "Installing Tmux plugins..."
+        "${tpm_path}/bin/install_plugins" 2>/dev/null || log_warning "Tmux plugin installation failed (press 'Ctrl+a I' in tmux to install)"
     fi
-    
-    log_success "Tmux configured successfully"
 }
 
 setup_tmux() {

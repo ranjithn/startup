@@ -25,46 +25,71 @@ install_oh_my_zsh() {
 }
 
 install_zsh_plugins() {
-    log_info "Installing Zsh plugins..."
+    log_info "Checking Zsh plugins..."
     
     local zsh_custom="${HOME}/.oh-my-zsh/custom"
+    local plugins_updated=false
     
     # zsh-autosuggestions
     if [ ! -d "${zsh_custom}/plugins/zsh-autosuggestions" ]; then
         log_info "Installing zsh-autosuggestions..."
-        git clone https://github.com/zsh-users/zsh-autosuggestions "${zsh_custom}/plugins/zsh-autosuggestions"
+        git clone https://github.com/zsh-users/zsh-autosuggestions "${zsh_custom}/plugins/zsh-autosuggestions" 2>/dev/null && plugins_updated=true
+    else
+        log_success "zsh-autosuggestions already installed"
     fi
     
     # zsh-syntax-highlighting
     if [ ! -d "${zsh_custom}/plugins/zsh-syntax-highlighting" ]; then
         log_info "Installing zsh-syntax-highlighting..."
-        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "${zsh_custom}/plugins/zsh-syntax-highlighting"
+        git clone https://github.com/zsh-users/zsh-syntax-highlighting.git "${zsh_custom}/plugins/zsh-syntax-highlighting" 2>/dev/null && plugins_updated=true
+    else
+        log_success "zsh-syntax-highlighting already installed"
     fi
     
     # zsh-completions
     if [ ! -d "${zsh_custom}/plugins/zsh-completions" ]; then
         log_info "Installing zsh-completions..."
-        git clone https://github.com/zsh-users/zsh-completions "${zsh_custom}/plugins/zsh-completions"
+        git clone https://github.com/zsh-users/zsh-completions "${zsh_custom}/plugins/zsh-completions" 2>/dev/null && plugins_updated=true
+    else
+        log_success "zsh-completions already installed"
     fi
     
     # powerlevel10k theme
     if [ ! -d "${zsh_custom}/themes/powerlevel10k" ]; then
         log_info "Installing powerlevel10k theme..."
-        git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${zsh_custom}/themes/powerlevel10k"
+        git clone --depth=1 https://github.com/romkatv/powerlevel10k.git "${zsh_custom}/themes/powerlevel10k" 2>/dev/null && plugins_updated=true
+    else
+        log_success "powerlevel10k already installed"
     fi
     
-    log_success "Zsh plugins installed successfully"
+    if [ "$plugins_updated" = true ]; then
+        log_success "Zsh plugins updated"
+    else
+        log_success "All Zsh plugins already installed"
+    fi
 }
 
 configure_zsh() {
     log_info "Configuring Zsh..."
     
-    # Backup existing .zshrc
-    backup_file "${HOME}/.zshrc"
+    # Check if .zshrc needs updating
+    local needs_update=false
+    if [ ! -f "${HOME}/.zshrc" ]; then
+        needs_update=true
+    elif [ -n "$RAW_BASE_URL" ]; then
+        # Check if managed by this installer (contains oh-my-zsh marker)
+        if ! grep -q "oh-my-zsh" "${HOME}/.zshrc" 2>/dev/null; then
+            needs_update=true
+        fi
+    fi
     
-    # Download and install .zshrc
-    if [ -n "$RAW_BASE_URL" ]; then
-        curl -fsSL "${RAW_BASE_URL}/dotfiles/.zshrc" -o "${HOME}/.zshrc"
+    if [ "$needs_update" = true ]; then
+        # Backup existing .zshrc
+        backup_file "${HOME}/.zshrc"
+        
+        # Download and install .zshrc
+        if [ -n "$RAW_BASE_URL" ]; then
+            curl -fsSL "${RAW_BASE_URL}/dotfiles/.zshrc" -o "${HOME}/.zshrc"
     else
         # Fallback: create a basic .zshrc if running locally
         cat > "${HOME}/.zshrc" << 'EOF'
@@ -128,27 +153,34 @@ fi
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
 EOF
+        fi
+        log_success "Zsh configured successfully"
+    else
+        log_success "Zsh is already configured (skipping)"
     fi
-    
-    log_success "Zsh configured successfully"
 }
 
 change_default_shell() {
-    log_info "Changing default shell to Zsh..."
+    log_info "Checking default shell..."
     
     local zsh_path=$(command -v zsh)
     
     # Check if zsh is in /etc/shells
-    if ! grep -q "$zsh_path" /etc/shells; then
+    if ! grep -q "^${zsh_path}$" /etc/shells 2>/dev/null; then
         log_info "Adding Zsh to /etc/shells..."
-        echo "$zsh_path" | $SUDO tee -a /etc/shells
+        echo "$zsh_path" | $SUDO tee -a /etc/shells >/dev/null 2>&1 || log_warning "Failed to add Zsh to /etc/shells"
+    else
+        log_success "Zsh is already in /etc/shells"
     fi
     
-    # Change default shell
+    # Change default shell only if not already set
     if [ "$SHELL" != "$zsh_path" ]; then
         log_info "Changing default shell to Zsh (may require password)..."
-        chsh -s "$zsh_path" || log_warning "Failed to change shell. You can do this manually with: chsh -s $zsh_path"
-        log_success "Default shell changed to Zsh (restart terminal to take effect)"
+        if chsh -s "$zsh_path" 2>/dev/null; then
+            log_success "Default shell changed to Zsh (restart terminal to take effect)"
+        else
+            log_warning "Failed to change shell automatically. Run manually: chsh -s $zsh_path"
+        fi
     else
         log_success "Zsh is already the default shell"
     fi

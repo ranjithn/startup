@@ -15,20 +15,34 @@ install_vim() {
 configure_vim() {
     log_info "Configuring Vim..."
     
-    # Backup existing .vimrc
-    backup_file "${HOME}/.vimrc"
-    
     # Install vim-plug (plugin manager)
     local vim_plug_path="${HOME}/.vim/autoload/plug.vim"
     if [ ! -f "$vim_plug_path" ]; then
         log_info "Installing vim-plug..."
         curl -fLo "$vim_plug_path" --create-dirs \
             https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+    else
+        log_success "vim-plug is already installed"
     fi
     
-    # Download and install .vimrc
-    if [ -n "$RAW_BASE_URL" ]; then
-        curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc"
+    # Check if .vimrc needs updating
+    local needs_update=false
+    if [ ! -f "${HOME}/.vimrc" ]; then
+        needs_update=true
+    elif [ -n "$RAW_BASE_URL" ]; then
+        # Check if managed by this installer (contains plug#begin marker)
+        if ! grep -q "call plug#begin" "${HOME}/.vimrc" 2>/dev/null; then
+            needs_update=true
+        fi
+    fi
+    
+    if [ "$needs_update" = true ]; then
+        # Backup existing .vimrc
+        backup_file "${HOME}/.vimrc"
+        
+        # Download and install .vimrc
+        if [ -n "$RAW_BASE_URL" ]; then
+            curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc"
     else
         # Fallback: create a basic .vimrc if running locally
         cat > "${HOME}/.vimrc" << 'EOF'
@@ -83,13 +97,17 @@ nnoremap <leader>n :NERDTreeToggle<CR>
 nnoremap <leader>w :w<CR>
 nnoremap <leader>q :q<CR>
 EOF
+        fi
+        log_success "Vim configured successfully"
+    else
+        log_success "Vim is already configured (skipping)"
     fi
     
-    # Install plugins
-    log_info "Installing Vim plugins..."
-    vim +PlugInstall +qall 2>/dev/null || true
-    
-    log_success "Vim configured successfully"
+    # Install/update plugins if vim-plug is present
+    if [ -f "${HOME}/.vim/autoload/plug.vim" ] && [ "$needs_update" = true ]; then
+        log_info "Installing Vim plugins..."
+        vim +PlugInstall +qall 2>/dev/null || log_warning "Vim plugin installation failed (you can run ':PlugInstall' manually)"
+    fi
 }
 
 setup_vim() {

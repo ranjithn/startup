@@ -7,8 +7,7 @@
 #   Remote: curl -fsSL https://raw.githubusercontent.com/username/startup/main/linux_installer.sh | bash
 #
 # The script is modular and can be easily extended for additional tools
-
-set -e  # Exit on error
+# Re-entrant: Safe to run multiple times - only installs/updates what's needed
 
 # Colors for output
 RED='\033[0;31m'
@@ -66,18 +65,22 @@ check_sudo
 
 # Update package manager
 log_info "Updating package manager..."
-$SUDO $PKG_UPDATE
+$SUDO $PKG_UPDATE 2>/dev/null || log_warning "Package manager update had issues (continuing anyway)"
 
 # Install git if not present (required for plugins)
 if ! command -v git &> /dev/null; then
     log_info "Installing git..."
-    $SUDO $PKG_INSTALL git
+    $SUDO $PKG_INSTALL git || log_error "Failed to install git"
+else
+    log_success "git is already installed"
 fi
 
 # Install curl if not present
 if ! command -v curl &> /dev/null; then
     log_info "Installing curl..."
-    $SUDO $PKG_INSTALL curl
+    $SUDO $PKG_INSTALL curl || log_error "Failed to install curl"
+else
+    log_success "curl is already installed"
 fi
 
 # Load and run module installations
