@@ -14,7 +14,7 @@ Modular installer scripts for setting up development environments on new machine
 
 ```bash
 # Remote (recommended)
-curl -fsSL https://raw.githubusercontent.com/ranjithn/startup/dev/linux_installer.sh | bash
+curl -fsSL https://raw.githubusercontent.com/ranjithn/startup/refs/heads/master/linux_installer.sh | bash
 
 # Local
 git clone https://github.com/ranjithn/startup.git && cd startup
