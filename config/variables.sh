@@ -17,6 +17,11 @@ export GITHUB_USER="${GITHUB_USER:-ranjithn}"
 export GITHUB_REPO="${GITHUB_REPO:-startup}"
 export GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
 
+# Flags (exported by linux_installer.sh after arg parsing; default to false)
+export FORCE_INSTALL="${FORCE_INSTALL:-false}"
+export UPDATE_ONLY="${UPDATE_ONLY:-false}"
+export DRY_RUN="${DRY_RUN:-false}"
+
 # Package manager detection
 detect_package_manager() {
     if command -v apt-get &> /dev/null; then
@@ -58,13 +63,30 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
-# Backup existing file
+log_dryrun() {
+    echo -e "${YELLOW}[DRY-RUN]${NC} $1"
+}
+
+# Run a command, or just print it in dry-run mode
+maybe_run() {
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "Would run: $*"
+    else
+        "$@"
+    fi
+}
+
+# Backup existing file (no-op in dry-run mode)
 backup_file() {
     local file=$1
     if [ -f "$file" ] || [ -L "$file" ]; then
-        mkdir -p "$BACKUP_DIR"
-        mv "$file" "$BACKUP_DIR/"
-        log_warning "Backed up existing $(basename $file) to $BACKUP_DIR"
+        if [ "$DRY_RUN" = true ]; then
+            log_dryrun "Would backup $(basename "$file") to $BACKUP_DIR"
+        else
+            mkdir -p "$BACKUP_DIR"
+            mv "$file" "$BACKUP_DIR/"
+            log_warning "Backed up existing $(basename "$file") to $BACKUP_DIR"
+        fi
     fi
 }
 

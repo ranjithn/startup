@@ -2,52 +2,61 @@
 # Vim installation and configuration
 
 install_vim() {
+    [ "$UPDATE_ONLY" = true ] && return 0
     log_info "Installing Vim..."
-    
-    if command -v vim &> /dev/null; then
+
+    if command -v vim &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
         log_success "Vim is already installed"
     else
-        $SUDO $PKG_INSTALL vim || { log_error "Failed to install vim"; return 1; }
+        maybe_run $SUDO $PKG_INSTALL vim || { log_error "Failed to install vim"; return 1; }
         log_success "Vim installed successfully"
     fi
 }
 
 configure_vim() {
+    # Update mode: only update plugins
+    if [ "$UPDATE_ONLY" = true ]; then
+        if [ -f "${HOME}/.vim/autoload/plug.vim" ]; then
+            log_info "Updating Vim plugins..."
+            maybe_run vim +PlugUpdate +qall 2>/dev/null \
+                || log_warning "Vim plugin update failed (run ':PlugUpdate' manually)"
+        fi
+        return 0
+    fi
+
     log_info "Configuring Vim..."
-    
+
     # Install vim-plug (plugin manager)
     local vim_plug_path="${HOME}/.vim/autoload/plug.vim"
-    if [ ! -f "$vim_plug_path" ]; then
+    if [ ! -f "$vim_plug_path" ] || [ "$FORCE_INSTALL" = true ]; then
         log_info "Installing vim-plug..."
-        curl -fLo "$vim_plug_path" --create-dirs \
+        maybe_run curl -fLo "$vim_plug_path" --create-dirs \
             https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim \
             || log_warning "vim-plug download failed (run ':PlugInstall' manually after fixing network)"
     else
         log_success "vim-plug is already installed"
     fi
-    
+
     # Check if .vimrc needs updating
     local needs_update=false
-    if [ ! -f "${HOME}/.vimrc" ]; then
+    if [ "$FORCE_INSTALL" = true ]; then
         needs_update=true
-    elif [ -n "$RAW_BASE_URL" ]; then
-        # Check if managed by this installer (contains plug#begin marker)
-        if ! grep -q "call plug#begin" "${HOME}/.vimrc" 2>/dev/null; then
-            needs_update=true
-        fi
+    elif [ ! -f "${HOME}/.vimrc" ]; then
+        needs_update=true
+    elif ! grep -q "call plug#begin" "${HOME}/.vimrc" 2>/dev/null; then
+        needs_update=true
     fi
-    
+
     if [ "$needs_update" = true ]; then
-        # Backup existing .vimrc
-        backup_file "${HOME}/.vimrc"
-        
-        # Download and install .vimrc
-        if [ -n "$RAW_BASE_URL" ]; then
-            curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc" \
-                || { log_error "Failed to download .vimrc"; return 1; }
-    else
-        # Fallback: create a basic .vimrc if running locally
-        cat > "${HOME}/.vimrc" << 'EOF'
+        if [ "$DRY_RUN" = true ]; then
+            log_dryrun "Would backup and deploy .vimrc"
+        else
+            backup_file "${HOME}/.vimrc"
+            if [ -n "$RAW_BASE_URL" ]; then
+                curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc" \
+                    || { log_error "Failed to download .vimrc"; return 1; }
+            else
+                cat > "${HOME}/.vimrc" << 'EOF'
 " Vim configuration
 set nocompatible
 filetype off
@@ -99,16 +108,17 @@ nnoremap <leader>n :NERDTreeToggle<CR>
 nnoremap <leader>w :w<CR>
 nnoremap <leader>q :q<CR>
 EOF
+            fi
         fi
         log_success "Vim configured successfully"
     else
         log_success "Vim is already configured (skipping)"
     fi
-    
-    # Install/update plugins if vim-plug is present
+
     if [ -f "${HOME}/.vim/autoload/plug.vim" ] && [ "$needs_update" = true ]; then
         log_info "Installing Vim plugins..."
-        vim +PlugInstall +qall 2>/dev/null || log_warning "Vim plugin installation failed (you can run ':PlugInstall' manually)"
+        maybe_run vim +PlugInstall +qall 2>/dev/null \
+            || log_warning "Vim plugin installation failed (run ':PlugInstall' manually)"
     fi
 }
 

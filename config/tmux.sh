@@ -2,50 +2,61 @@
 # Tmux installation and configuration
 
 install_tmux() {
+    [ "$UPDATE_ONLY" = true ] && return 0
     log_info "Installing Tmux..."
-    
-    if command -v tmux &> /dev/null; then
+
+    if command -v tmux &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
         log_success "Tmux is already installed"
     else
-        $SUDO $PKG_INSTALL tmux || { log_error "Failed to install tmux"; return 1; }
+        maybe_run $SUDO $PKG_INSTALL tmux || { log_error "Failed to install tmux"; return 1; }
         log_success "Tmux installed successfully"
     fi
 }
 
 configure_tmux() {
-    log_info "Configuring Tmux..."
-    
-    # Install TPM (Tmux Plugin Manager)
     local tpm_path="${HOME}/.tmux/plugins/tpm"
-    if [ ! -d "$tpm_path" ]; then
+
+    # Update mode: only update plugins
+    if [ "$UPDATE_ONLY" = true ]; then
+        if [ -d "$tpm_path" ]; then
+            log_info "Updating Tmux plugins..."
+            maybe_run "${tpm_path}/bin/update_plugins" all 2>/dev/null \
+                || log_warning "Tmux plugin update failed (press 'Ctrl+a U' in tmux)"
+        fi
+        return 0
+    fi
+
+    log_info "Configuring Tmux..."
+
+    # Install TPM (Tmux Plugin Manager)
+    if [ ! -d "$tpm_path" ] || [ "$FORCE_INSTALL" = true ]; then
         log_info "Installing TPM (Tmux Plugin Manager)..."
-        git clone https://github.com/tmux-plugins/tpm "$tpm_path" 2>/dev/null || log_warning "TPM installation failed"
+        maybe_run git clone https://github.com/tmux-plugins/tpm "$tpm_path" 2>/dev/null \
+            || log_warning "TPM installation failed"
     else
         log_success "TPM is already installed"
     fi
-    
+
     # Check if .tmux.conf needs updating
     local needs_update=false
-    if [ ! -f "${HOME}/.tmux.conf" ]; then
+    if [ "$FORCE_INSTALL" = true ]; then
         needs_update=true
-    elif [ -n "$RAW_BASE_URL" ]; then
-        # Check if managed by this installer (contains tpm marker)
-        if ! grep -q "tmux-plugins/tpm" "${HOME}/.tmux.conf" 2>/dev/null; then
-            needs_update=true
-        fi
+    elif [ ! -f "${HOME}/.tmux.conf" ]; then
+        needs_update=true
+    elif ! grep -q "tmux-plugins/tpm" "${HOME}/.tmux.conf" 2>/dev/null; then
+        needs_update=true
     fi
-    
+
     if [ "$needs_update" = true ]; then
-        # Backup existing .tmux.conf
-        backup_file "${HOME}/.tmux.conf"
-        
-        # Download and install .tmux.conf
-        if [ -n "$RAW_BASE_URL" ]; then
-            curl -fsSL "${RAW_BASE_URL}/dotfiles/.tmux.conf" -o "${HOME}/.tmux.conf" \
-                || { log_error "Failed to download .tmux.conf"; return 1; }
-    else
-        # Fallback: create a basic .tmux.conf if running locally
-        cat > "${HOME}/.tmux.conf" << 'EOF'
+        if [ "$DRY_RUN" = true ]; then
+            log_dryrun "Would backup and deploy .tmux.conf"
+        else
+            backup_file "${HOME}/.tmux.conf"
+            if [ -n "$RAW_BASE_URL" ]; then
+                curl -fsSL "${RAW_BASE_URL}/dotfiles/.tmux.conf" -o "${HOME}/.tmux.conf" \
+                    || { log_error "Failed to download .tmux.conf"; return 1; }
+            else
+                cat > "${HOME}/.tmux.conf" << 'EOF'
 # Tmux configuration
 
 # Change prefix from C-b to C-a
@@ -108,16 +119,17 @@ set -g @plugin 'tmux-plugins/tmux-yank'
 # Initialize TPM (keep this line at the very bottom)
 run '~/.tmux/plugins/tpm/tpm'
 EOF
+            fi
         fi
         log_success "Tmux configured successfully"
     else
         log_success "Tmux is already configured (skipping)"
     fi
-    
-    # Install/update plugins if TPM is present and config was updated
+
     if [ -d "$tpm_path" ] && [ "$needs_update" = true ]; then
         log_info "Installing Tmux plugins..."
-        "${tpm_path}/bin/install_plugins" 2>/dev/null || log_warning "Tmux plugin installation failed (press 'Ctrl+a I' in tmux to install)"
+        maybe_run "${tpm_path}/bin/install_plugins" 2>/dev/null \
+            || log_warning "Tmux plugin installation failed (press 'Ctrl+a I' in tmux)"
     fi
 }
 

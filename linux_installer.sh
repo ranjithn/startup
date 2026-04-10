@@ -1,13 +1,16 @@
 #!/bin/bash
 # Linux Development Environment Installer
-# This script installs and configures vim, tmux, and zsh with good defaults and plugins
-# 
+# This script installs and configures vim, tmux, zsh, and docker with good defaults and plugins
+#
 # Usage:
-#   Local:  bash linux_installer.sh
+#   Local:  bash linux_installer.sh [options]
 #   Remote: curl -fsSL https://raw.githubusercontent.com/username/startup/main/linux_installer.sh | bash
 #
-# The script is modular and can be easily extended for additional tools
-# Re-entrant: Safe to run multiple times - only installs/updates what's needed
+# Options:
+#   --force    Reinstall everything, even if already present
+#   --update   Update plugins only, skip package installs and configs
+#   --dry-run  Show what would be done without making changes
+#   -h, --help Show this help message
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,9 +18,42 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Parse arguments
+FORCE_INSTALL=false
+UPDATE_ONLY=false
+DRY_RUN=false
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --force)   FORCE_INSTALL=true ;;
+        --update)  UPDATE_ONLY=true ;;
+        --dry-run) DRY_RUN=true ;;
+        -h|--help)
+            echo "Usage: $0 [options]"
+            echo ""
+            echo "Options:"
+            echo "  --force    Reinstall everything, even if already present"
+            echo "  --update   Update plugins only, skip package installs and configs"
+            echo "  --dry-run  Show what would be done without making changes"
+            echo "  -h, --help Show this help message"
+            exit 0
+            ;;
+        *)
+            echo "Unknown option: $1"
+            echo "Run '$0 --help' for usage."
+            exit 1
+            ;;
+    esac
+    shift
+done
+export FORCE_INSTALL UPDATE_ONLY DRY_RUN
+
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}  Linux Development Environment Setup${NC}"
 echo -e "${BLUE}======================================${NC}"
+[ "$DRY_RUN" = true ]    && echo -e "${BLUE}  [DRY-RUN MODE - no changes will be made]${NC}"
+[ "$FORCE_INSTALL" = true ] && echo -e "${BLUE}  [FORCE mode - reinstalling everything]${NC}"
+[ "$UPDATE_ONLY" = true ]   && echo -e "${BLUE}  [UPDATE mode - plugins only]${NC}"
 echo ""
 
 # Determine if running from curl or locally
@@ -57,30 +93,30 @@ fi
 # Load variables and utility functions
 source_config "variables.sh"
 
-# Detect package manager
+# Skip package manager and sudo checks in update/dry-run mode where possible
 detect_package_manager
-
-# Check for sudo/root
 check_sudo
 
-# Update package manager
-log_info "Updating package manager..."
-$SUDO $PKG_UPDATE 2>/dev/null || log_warning "Package manager update had issues (continuing anyway)"
+if [ "$UPDATE_ONLY" != true ]; then
+    # Update package manager
+    log_info "Updating package manager..."
+    $SUDO $PKG_UPDATE 2>/dev/null || log_warning "Package manager update had issues (continuing anyway)"
 
-# Install git if not present (required for plugins)
-if ! command -v git &> /dev/null; then
-    log_info "Installing git..."
-    $SUDO $PKG_INSTALL git || log_error "Failed to install git"
-else
-    log_success "git is already installed"
-fi
+    # Install git if not present (required for plugins)
+    if ! command -v git &> /dev/null; then
+        log_info "Installing git..."
+        maybe_run $SUDO $PKG_INSTALL git || log_error "Failed to install git"
+    else
+        log_success "git is already installed"
+    fi
 
-# Install curl if not present
-if ! command -v curl &> /dev/null; then
-    log_info "Installing curl..."
-    $SUDO $PKG_INSTALL curl || log_error "Failed to install curl"
-else
-    log_success "curl is already installed"
+    # Install curl if not present
+    if ! command -v curl &> /dev/null; then
+        log_info "Installing curl..."
+        maybe_run $SUDO $PKG_INSTALL curl || log_error "Failed to install curl"
+    else
+        log_success "curl is already installed"
+    fi
 fi
 
 # Load and run module installations
@@ -89,6 +125,7 @@ log_info "Loading installation modules..."
 source_config "vim.sh"
 source_config "tmux.sh"
 source_config "zsh.sh"
+source_config "docker.sh"
 
 # Execute installations
 echo ""
@@ -104,6 +141,9 @@ echo ""
 setup_zsh
 echo ""
 
+setup_docker
+echo ""
+
 # Cleanup if running from curl
 if [ "$LOCAL_MODE" = false ]; then
     cd /tmp
@@ -117,11 +157,15 @@ echo -e "${GREEN}  Installation Complete!${NC}"
 echo -e "${GREEN}======================================${NC}"
 echo ""
 log_success "All tools have been installed and configured"
-log_info "Next steps:"
-echo "  1. Restart your terminal or run: source ~/.zshrc"
-echo "  2. For Vim: Run ':PlugInstall' inside vim if plugins didn't install"
-echo "  3. For Tmux: Press 'prefix + I' (Ctrl+a then I) to install plugins"
-echo "  4. For Zsh: Run 'p10k configure' to customize your prompt"
-echo ""
-log_warning "Note: If your shell didn't change, run: chsh -s \$(which zsh)"
+
+if [ "$UPDATE_ONLY" != true ]; then
+    log_info "Next steps:"
+    echo "  1. Restart your terminal or run: source ~/.zshrc"
+    echo "  2. For Vim:   Run ':PlugInstall' inside vim if plugins didn't install"
+    echo "  3. For Tmux:  Press 'prefix + I' (Ctrl+a then I) to install plugins"
+    echo "  4. For Zsh:   Run 'p10k configure' to customize your prompt"
+    echo "  5. For Docker: Run 'newgrp docker' or log out/in to use docker without sudo"
+    echo ""
+    log_warning "Note: If your shell didn't change, run: chsh -s \$(which zsh)"
+fi
 echo ""
