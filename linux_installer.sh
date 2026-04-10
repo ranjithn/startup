@@ -4,7 +4,7 @@
 #
 # Usage:
 #   Local:  bash linux_installer.sh [options]
-#   Remote: curl -fsSL https://raw.githubusercontent.com/username/startup/main/linux_installer.sh | bash
+#   Remote: curl -fsSL https://raw.githubusercontent.com/ranjithn/startup/refs/heads/master/linux_installer.sh | bash
 #
 # Options:
 #   --force    Reinstall everything, even if already present
@@ -86,8 +86,8 @@ source_config() {
 if [ "$LOCAL_MODE" = false ]; then
     export GITHUB_USER="${GITHUB_USER:-ranjithn}"
     export GITHUB_REPO="${GITHUB_REPO:-startup}"
-    export GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
-    export RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_BRANCH}"
+    export GITHUB_BRANCH="${GITHUB_BRANCH:-master}"
+    export RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}"
 fi
 
 # Load variables and utility functions
