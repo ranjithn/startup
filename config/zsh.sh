@@ -48,7 +48,7 @@ install_zsh_plugins() {
             fi
         else
             log_info "Installing $name..."
-            maybe_run git clone "$url" "$path" 2>/dev/null && plugins_updated=true \
+            maybe_run git clone --depth=1 "$url" "$path" 2>/dev/null && plugins_updated=true \
                 || log_warning "Failed to install $name"
         fi
     }
@@ -66,7 +66,7 @@ install_zsh_plugins() {
         "${zsh_custom}/plugins/zsh-completions"
 
     _clone_or_update_plugin "powerlevel10k" \
-        "https://github.com/romkatv/powerlevel10k.git --depth=1" \
+        "https://github.com/romkatv/powerlevel10k.git" \
         "${zsh_custom}/themes/powerlevel10k"
 
     if [ "$plugins_updated" = true ]; then
@@ -192,6 +192,16 @@ change_default_shell() {
             log_success "Default shell changed to Zsh (restart terminal to take effect)"
         else
             log_warning "Failed to change shell automatically. Run manually: chsh -s $zsh_path"
+            if [ "$(whoami)" = "azureuser" ]; then
+                if grep -q "exec zsh" "${HOME}/.bashrc" 2>/dev/null; then
+                    log_success "exec zsh already present in ~/.bashrc"
+                else
+                    log_info "Falling back to exec zsh in ~/.bashrc..."
+                    maybe_run bash -c "echo 'exec zsh' >> ${HOME}/.bashrc" \
+                        && log_success "Added 'exec zsh' to ~/.bashrc (takes effect on next login)" \
+                        || log_warning "Failed to update ~/.bashrc"
+                fi
+            fi
         fi
     else
         log_success "Zsh is already the default shell"
