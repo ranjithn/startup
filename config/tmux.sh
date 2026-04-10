@@ -7,7 +7,7 @@ install_tmux() {
     if command -v tmux &> /dev/null; then
         log_success "Tmux is already installed"
     else
-        $SUDO $PKG_INSTALL tmux
+        $SUDO $PKG_INSTALL tmux || { log_error "Failed to install tmux"; return 1; }
         log_success "Tmux installed successfully"
     fi
 }
@@ -41,7 +41,8 @@ configure_tmux() {
         
         # Download and install .tmux.conf
         if [ -n "$RAW_BASE_URL" ]; then
-            curl -fsSL "${RAW_BASE_URL}/dotfiles/.tmux.conf" -o "${HOME}/.tmux.conf"
+            curl -fsSL "${RAW_BASE_URL}/dotfiles/.tmux.conf" -o "${HOME}/.tmux.conf" \
+                || { log_error "Failed to download .tmux.conf"; return 1; }
     else
         # Fallback: create a basic .tmux.conf if running locally
         cat > "${HOME}/.tmux.conf" << 'EOF'

@@ -7,7 +7,7 @@ install_zsh() {
     if command -v zsh &> /dev/null; then
         log_success "Zsh is already installed"
     else
-        $SUDO $PKG_INSTALL zsh
+        $SUDO $PKG_INSTALL zsh || { log_error "Failed to install zsh"; return 1; }
         log_success "Zsh installed successfully"
     fi
 }
@@ -89,10 +89,16 @@ configure_zsh() {
         
         # Download and install .zshrc
         if [ -n "$RAW_BASE_URL" ]; then
-            curl -fsSL "${RAW_BASE_URL}/dotfiles/.zshrc" -o "${HOME}/.zshrc"
+            curl -fsSL "${RAW_BASE_URL}/dotfiles/.zshrc" -o "${HOME}/.zshrc" \
+                || { log_error "Failed to download .zshrc"; return 1; }
     else
         # Fallback: create a basic .zshrc if running locally
         cat > "${HOME}/.zshrc" << 'EOF'
+# Enable Powerlevel10k instant prompt (must be at top of .zshrc)
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
 # Path to oh-my-zsh installation
 export ZSH="$HOME/.oh-my-zsh"
 
@@ -144,11 +150,6 @@ alias tmux='tmux -2'
 mkcd() {
     mkdir -p "$1" && cd "$1"
 }
-
-# Load powerlevel10k instant prompt
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
 
 # To customize prompt, run `p10k configure` or edit ~/.p10k.zsh
 [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh

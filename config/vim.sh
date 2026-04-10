@@ -7,7 +7,7 @@ install_vim() {
     if command -v vim &> /dev/null; then
         log_success "Vim is already installed"
     else
-        $SUDO $PKG_INSTALL vim
+        $SUDO $PKG_INSTALL vim || { log_error "Failed to install vim"; return 1; }
         log_success "Vim installed successfully"
     fi
 }
@@ -20,7 +20,8 @@ configure_vim() {
     if [ ! -f "$vim_plug_path" ]; then
         log_info "Installing vim-plug..."
         curl -fLo "$vim_plug_path" --create-dirs \
-            https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim
+            https://raw.githubusercontent.com/junegunn/vim-plug/master/plug.vim \
+            || log_warning "vim-plug download failed (run ':PlugInstall' manually after fixing network)"
     else
         log_success "vim-plug is already installed"
     fi
@@ -42,7 +43,8 @@ configure_vim() {
         
         # Download and install .vimrc
         if [ -n "$RAW_BASE_URL" ]; then
-            curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc"
+            curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc" \
+                || { log_error "Failed to download .vimrc"; return 1; }
     else
         # Fallback: create a basic .vimrc if running locally
         cat > "${HOME}/.vimrc" << 'EOF'
