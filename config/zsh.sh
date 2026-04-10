@@ -88,6 +88,8 @@ configure_zsh() {
         needs_update=true
     elif ! grep -q "oh-my-zsh" "${HOME}/.zshrc" 2>/dev/null; then
         needs_update=true
+    elif ! grep -q "powerlevel10k/powerlevel10k" "${HOME}/.zshrc" 2>/dev/null; then
+        needs_update=true
     fi
 
     if [ "$needs_update" = true ]; then
