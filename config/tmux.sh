@@ -11,6 +11,14 @@ install_tmux() {
         maybe_run $SUDO $PKG_INSTALL tmux || { log_error "Failed to install tmux"; return 1; }
         log_success "Tmux installed successfully"
     fi
+
+    # Install xclip (required by tmux-yank for system clipboard support)
+    if command -v xclip &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
+        log_success "xclip is already installed"
+    else
+        log_info "Installing xclip (needed by tmux-yank)..."
+        maybe_run $SUDO $PKG_INSTALL xclip || log_warning "Failed to install xclip — tmux-yank copy to clipboard won't work"
+    fi
 }
 
 configure_tmux() {
@@ -70,6 +78,9 @@ set -g mouse on
 # Start windows and panes at 1, not 0
 set -g base-index 1
 setw -g pane-base-index 1
+
+# Enable OSC 52 clipboard (copies travel through SSH to local clipboard)
+set -g set-clipboard on
 
 # Reload config file
 bind r source-file ~/.tmux.conf \; display "Config reloaded!"
