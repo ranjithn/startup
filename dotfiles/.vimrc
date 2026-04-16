@@ -66,7 +66,12 @@ set softtabstop=4               " Backspace removes 4 spaces
 
 " UI settings
 set mouse=a                     " Enable mouse support
-set clipboard=unnamedplus       " Use system clipboard
+" macOS uses 'unnamed' (*); Linux X11 uses 'unnamedplus' (+)
+if has('mac') || has('macunix')
+    set clipboard=unnamed
+else
+    set clipboard=unnamedplus
+endif
 set cursorline                  " Highlight current line
 set scrolloff=8                 " Keep 8 lines above/below cursor
 set sidescrolloff=8             " Keep 8 columns left/right of cursor

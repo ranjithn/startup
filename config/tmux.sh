@@ -7,17 +7,26 @@ install_tmux() {
 
     if command -v tmux &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
         log_success "Tmux is already installed"
+    elif [ "${IS_MACOS:-false}" = true ]; then
+        maybe_run brew install tmux || { log_error "Failed to install tmux"; return 1; }
+        log_success "Tmux installed successfully"
     else
         maybe_run $SUDO $PKG_INSTALL tmux || { log_error "Failed to install tmux"; return 1; }
         log_success "Tmux installed successfully"
     fi
 
-    # Install xclip (required by tmux-yank for system clipboard support)
-    if command -v xclip &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
-        log_success "xclip is already installed"
+    # Install clipboard support for tmux-yank
+    if [ "${IS_MACOS:-false}" = true ]; then
+        # macOS has pbcopy/pbpaste built in; tmux-yank uses them natively on macOS 10.12+
+        log_success "macOS clipboard (pbcopy/pbpaste) is available for tmux-yank"
     else
-        log_info "Installing xclip (needed by tmux-yank)..."
-        maybe_run $SUDO $PKG_INSTALL xclip || log_warning "Failed to install xclip — tmux-yank copy to clipboard won't work"
+        # Linux: install xclip for X11 clipboard support
+        if command -v xclip &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
+            log_success "xclip is already installed"
+        else
+            log_info "Installing xclip (needed by tmux-yank)..."
+            maybe_run $SUDO $PKG_INSTALL xclip || log_warning "Failed to install xclip — tmux-yank copy to clipboard won't work"
+        fi
     fi
 }
 

@@ -10,6 +10,23 @@ install_docker() {
         return 0
     fi
 
+    if [ "${IS_MACOS:-false}" = true ]; then
+        # macOS uses Docker Desktop; brew installs the CLI tools via the cask
+        if [ "$DRY_RUN" = true ]; then
+            log_dryrun "Would install Docker Desktop via Homebrew cask"
+        else
+            if brew list --cask docker &> /dev/null 2>&1; then
+                log_success "Docker Desktop is already installed"
+            else
+                log_info "Installing Docker Desktop via Homebrew..."
+                maybe_run brew install --cask docker \
+                    || { log_warning "Docker Desktop install failed. Download manually from https://www.docker.com/products/docker-desktop/"; return 1; }
+                log_success "Docker Desktop installed. Launch Docker.app to start the daemon."
+            fi
+        fi
+        return 0
+    fi
+
     case "$PKG_MANAGER" in
         apt-get)
             if [ "$DRY_RUN" = true ]; then
@@ -53,7 +70,14 @@ configure_docker() {
     [ "$UPDATE_ONLY" = true ] && return 0
     log_info "Configuring Docker..."
 
-    # Enable and start Docker service
+    if [ "${IS_MACOS:-false}" = true ]; then
+        # On macOS, Docker Desktop manages the daemon — no systemctl or usermod needed
+        log_success "Docker on macOS is managed by Docker Desktop (no daemon config required)"
+        log_info "Start Docker Desktop from Applications, or run: open -a Docker"
+        return 0
+    fi
+
+    # Enable and start Docker service (Linux only)
     if command -v systemctl &> /dev/null; then
         maybe_run $SUDO systemctl enable docker
         maybe_run $SUDO systemctl start docker
