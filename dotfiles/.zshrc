@@ -28,7 +28,6 @@ plugins=(
     git
     history
     sudo
-    command-not-found
     colored-man-pages
     
     # Completion plugins
@@ -37,16 +36,6 @@ plugins=(
     # Syntax and suggestions
     zsh-autosuggestions
     zsh-syntax-highlighting
-    
-    # Development tools
-    docker
-    docker-compose
-    kubectl
-    terraform
-    npm
-    node
-    python
-    pip
     
     # Utilities
     extract
@@ -151,7 +140,12 @@ alias tl='tmux list-sessions'
 alias tk='tmux kill-session -t'
 
 # System
-alias ports='netstat -tulanp'
+# macOS netstat uses different flags than Linux; use lsof as a cross-platform alternative
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    alias ports='lsof -iTCP -sTCP:LISTEN -n -P'
+else
+    alias ports='netstat -tulanp'
+fi
 alias myip='curl ifconfig.me'
 
 # ========================
@@ -191,7 +185,8 @@ ff() {
 }
 
 # Quick find directory
-fd() {
+# Named fdir to avoid shadowing the 'fd' binary (brew install fd)
+fdir() {
     find . -type d -name "*$1*"
 }
 

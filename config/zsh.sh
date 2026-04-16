@@ -7,6 +7,11 @@ install_zsh() {
 
     if command -v zsh &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
         log_success "Zsh is already installed"
+    elif [ "${IS_MACOS:-false}" = true ]; then
+        # macOS ships zsh; brew install gives a newer version if desired
+        log_info "Installing Zsh via Homebrew..."
+        maybe_run brew install zsh || { log_error "Failed to install zsh"; return 1; }
+        log_success "Zsh installed successfully"
     else
         maybe_run $SUDO $PKG_INSTALL zsh || { log_error "Failed to install zsh"; return 1; }
         log_success "Zsh installed successfully"
@@ -119,14 +124,13 @@ plugins=(
     zsh-autosuggestions
     zsh-syntax-highlighting
     zsh-completions
-    docker
-    docker-compose
-    kubectl
-    terraform
     sudo
     history
-    command-not-found
     colored-man-pages
+    extract
+    copybuffer
+    copypath
+    copyfile
 )
 
 # Load oh-my-zsh
@@ -194,7 +198,8 @@ change_default_shell() {
             log_success "Default shell changed to Zsh (restart terminal to take effect)"
         else
             log_warning "Failed to change shell automatically. Run manually: chsh -s $zsh_path"
-            if [ "$(whoami)" = "azureuser" ]; then
+            if [ "${IS_MACOS:-false}" != true ]; then
+                # Linux fallback: add exec zsh to .bashrc
                 if grep -q "exec zsh" "${HOME}/.bashrc" 2>/dev/null; then
                     log_success "exec zsh already present in ~/.bashrc"
                 else

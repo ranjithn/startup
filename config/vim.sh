@@ -91,7 +91,12 @@ set tabstop=4
 set shiftwidth=4
 set softtabstop=4
 set mouse=a
-set clipboard=unnamedplus
+" macOS uses 'unnamed'; Linux X11 uses 'unnamedplus'; support both
+if has('mac') || has('macunix')
+    set clipboard=unnamed
+else
+    set clipboard=unnamedplus
+endif
 set cursorline
 set wildmenu
 set laststatus=2
