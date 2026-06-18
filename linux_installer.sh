@@ -18,24 +18,34 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
+# Require Linux
+if [[ "$(uname -s)" == "Darwin" ]]; then
+    echo -e "${RED}Error: This installer is for Linux only. Use macos_installer.sh on macOS.${NC}"
+    exit 1
+fi
+
 # Parse arguments
 FORCE_INSTALL=false
 UPDATE_ONLY=false
 DRY_RUN=false
+HARDEN_SSHD=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --force)   FORCE_INSTALL=true ;;
-        --update)  UPDATE_ONLY=true ;;
-        --dry-run) DRY_RUN=true ;;
+        --force)       FORCE_INSTALL=true ;;
+        --update)      UPDATE_ONLY=true ;;
+        --dry-run)     DRY_RUN=true ;;
+        --harden-sshd) HARDEN_SSHD=true ;;
         -h|--help)
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
-            echo "  --force    Reinstall everything, even if already present"
-            echo "  --update   Update plugins only, skip package installs and configs"
-            echo "  --dry-run  Show what would be done without making changes"
-            echo "  -h, --help Show this help message"
+            echo "  --force         Reinstall everything, even if already present"
+            echo "  --update        Update plugins only, skip package installs and configs"
+            echo "  --dry-run       Show what would be done without making changes"
+            echo "  --harden-sshd   Disable root login + password auth in sshd_config"
+            echo "                  (refuses to run if no ~/.ssh/authorized_keys exists)"
+            echo "  -h, --help      Show this help message"
             exit 0
             ;;
         *)
@@ -46,7 +56,7 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-export FORCE_INSTALL UPDATE_ONLY DRY_RUN
+export FORCE_INSTALL UPDATE_ONLY DRY_RUN HARDEN_SSHD
 
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}  Linux Development Environment Setup${NC}"
@@ -56,18 +66,20 @@ echo -e "${BLUE}======================================${NC}"
 [ "$UPDATE_ONLY" = true ]   && echo -e "${BLUE}  [UPDATE mode - plugins only]${NC}"
 echo ""
 
-# Determine if running from curl or locally
-if [ -t 0 ]; then
-    # Running locally
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Determine if running from curl or locally.
+# We're "local" when this script's sibling config/variables.sh is reachable — that's
+# more robust than the `[ -t 0 ]` heuristic (which broke under pipes, redirects, CI).
+_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+if [ -n "$_self_dir" ] && [ -f "${_self_dir}/config/variables.sh" ]; then
+    SCRIPT_DIR="$_self_dir"
     LOCAL_MODE=true
 else
-    # Running from curl
     SCRIPT_DIR="/tmp/startup_installer_$$"
     LOCAL_MODE=false
     mkdir -p "$SCRIPT_DIR"
     cd "$SCRIPT_DIR"
 fi
+unset _self_dir
 
 # Function to source config files
 source_config() {
@@ -126,6 +138,8 @@ source_config "vim.sh"
 source_config "tmux.sh"
 source_config "zsh.sh"
 source_config "docker.sh"
+source_config "ssh.sh"
+source_config "linux_hardening.sh"
 
 # Execute installations
 echo ""
@@ -142,6 +156,12 @@ setup_zsh
 echo ""
 
 setup_docker
+echo ""
+
+setup_ssh
+echo ""
+
+setup_linux_hardening
 echo ""
 
 # Cleanup if running from curl

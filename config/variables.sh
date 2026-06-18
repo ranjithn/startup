@@ -12,28 +12,25 @@ export NC='\033[0m' # No Color
 export DOTFILES_DIR="${HOME}/.dotfiles"
 export BACKUP_DIR="${HOME}/.dotfiles_backup_$(date +%Y%m%d_%H%M%S)"
 
-# GitHub raw content base URL for fetching dotfiles (set only in remote mode by linux_installer.sh)
+# GitHub raw content base URL for fetching dotfiles (set only in remote mode by the installer entry scripts)
 export GITHUB_USER="${GITHUB_USER:-ranjithn}"
 export GITHUB_REPO="${GITHUB_REPO:-startup}"
-export GITHUB_BRANCH="${GITHUB_BRANCH:-dev}"
+export GITHUB_BRANCH="${GITHUB_BRANCH:-master}"
 
 # Flags (exported by linux_installer.sh after arg parsing; default to false)
 export FORCE_INSTALL="${FORCE_INSTALL:-false}"
 export UPDATE_ONLY="${UPDATE_ONLY:-false}"
 export DRY_RUN="${DRY_RUN:-false}"
 
-# Package manager detection
+# Package manager detection.
+# On macOS, brew is assumed to be present (install_homebrew in config/brew.sh handles bootstrap).
+# Detection here does NOT bail on missing brew so --dry-run still works on a fresh Mac.
 detect_package_manager() {
     if [[ "$(uname -s)" == "Darwin" ]]; then
-        if command -v brew &> /dev/null; then
-            export PKG_MANAGER="brew"
-            export PKG_UPDATE="brew update"
-            export PKG_INSTALL="brew install"
-            export IS_MACOS=true
-        else
-            echo -e "${RED}Error: Homebrew not found. Install it from https://brew.sh${NC}"
-            exit 1
-        fi
+        export PKG_MANAGER="brew"
+        export PKG_UPDATE="brew update"
+        export PKG_INSTALL="brew install"
+        export IS_MACOS=true
     elif command -v apt-get &> /dev/null; then
         export PKG_MANAGER="apt-get"
         export PKG_UPDATE="apt-get update"
@@ -101,6 +98,30 @@ backup_file() {
             mv "$file" "$BACKUP_DIR/"
             log_warning "Backed up existing $(basename "$file") to $BACKUP_DIR"
         fi
+    fi
+}
+
+# Deploy a dotfile from the local clone (SCRIPT_DIR/dotfiles) or remote RAW_BASE_URL.
+# Args: $1 = filename relative to dotfiles/ (e.g. ".vimrc")
+#       $2 = destination path (default: $HOME/$1)
+deploy_dotfile() {
+    local filename=$1
+    local dest=${2:-${HOME}/${filename}}
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "Would deploy $filename to $dest"
+        return 0
+    fi
+    backup_file "$dest"
+    mkdir -p "$(dirname "$dest")"
+    if [ -n "$RAW_BASE_URL" ]; then
+        curl -fsSL "${RAW_BASE_URL}/dotfiles/${filename}" -o "$dest" \
+            || { log_error "Failed to download $filename"; return 1; }
+    elif [ -n "$SCRIPT_DIR" ] && [ -f "${SCRIPT_DIR}/dotfiles/${filename}" ]; then
+        cp "${SCRIPT_DIR}/dotfiles/${filename}" "$dest" \
+            || { log_error "Failed to copy $filename"; return 1; }
+    else
+        log_error "Cannot find $filename — neither RAW_BASE_URL nor local dotfiles/ is available"
+        return 1
     fi
 }
 

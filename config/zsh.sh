@@ -98,76 +98,7 @@ configure_zsh() {
     fi
 
     if [ "$needs_update" = true ]; then
-        if [ "$DRY_RUN" = true ]; then
-            log_dryrun "Would backup and deploy .zshrc"
-        else
-            backup_file "${HOME}/.zshrc"
-            if [ -n "$RAW_BASE_URL" ]; then
-                curl -fsSL "${RAW_BASE_URL}/dotfiles/.zshrc" -o "${HOME}/.zshrc" \
-                    || { log_error "Failed to download .zshrc"; return 1; }
-            else
-                cat > "${HOME}/.zshrc" << 'EOF'
-# Enable Powerlevel10k instant prompt (must be at top of .zshrc)
-if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
-  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
-fi
-
-# Path to oh-my-zsh installation
-export ZSH="$HOME/.oh-my-zsh"
-
-# Theme
-ZSH_THEME="powerlevel10k/powerlevel10k"
-
-# Plugins
-plugins=(
-    git
-    zsh-autosuggestions
-    zsh-syntax-highlighting
-    zsh-completions
-    sudo
-    history
-    colored-man-pages
-    extract
-    copybuffer
-    copypath
-    copyfile
-)
-
-# Load oh-my-zsh
-source $ZSH/oh-my-zsh.sh
-
-# User configuration
-export EDITOR='vim'
-export VISUAL='vim'
-
-# History settings
-HISTSIZE=10000
-SAVEHIST=10000
-setopt SHARE_HISTORY
-setopt HIST_IGNORE_DUPS
-setopt HIST_IGNORE_SPACE
-
-# Aliases
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
-alias ..='cd ..'
-alias ...='cd ../..'
-alias grep='grep --color=auto'
-alias zshconfig="vim ~/.zshrc"
-alias ohmyzsh="vim ~/.oh-my-zsh"
-alias tmux='tmux -2'
-
-# Custom functions
-mkcd() {
-    mkdir -p "$1" && cd "$1"
-}
-
-# To customize prompt, run `p10k configure` or edit ~/.p10k.zsh
-[[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
-EOF
-            fi
-        fi
+        deploy_dotfile ".zshrc" || return 1
         log_success "Zsh configured successfully"
     else
         log_success "Zsh is already configured (skipping)"
