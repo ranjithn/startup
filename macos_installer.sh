@@ -1,8 +1,9 @@
 #!/bin/bash
 # macOS Development Environment Installer
-# This script installs and configures vim, tmux, zsh, and docker with good defaults and plugins
+# This script installs and configures vim, tmux, and zsh with good defaults and plugins.
+# Docker is intentionally NOT installed — install Docker Desktop / OrbStack / Colima yourself.
 #
-# Prerequisites: Homebrew must be installed (https://brew.sh)
+# Prerequisites: none — Homebrew is bootstrapped automatically if missing.
 #
 # Usage:
 #   Local:  bash macos_installer.sh [options]
@@ -20,9 +21,14 @@ GREEN='\033[0;32m'
 BLUE='\033[0;34m'
 NC='\033[0m'
 
-# Require macOS
+# Require macOS on Apple Silicon. Intel Macs are intentionally not supported —
+# brew paths, casks, and bottles are assumed to be arm64.
 if [[ "$(uname -s)" != "Darwin" ]]; then
     echo -e "${RED}Error: This installer is for macOS only. Use linux_installer.sh on Linux.${NC}"
+    exit 1
+fi
+if [[ "$(uname -m)" != "arm64" ]]; then
+    echo -e "${RED}Error: This installer targets Apple Silicon (arm64) only; detected $(uname -m).${NC}"
     exit 1
 fi
 
@@ -64,9 +70,12 @@ echo -e "${BLUE}======================================${NC}"
 [ "$UPDATE_ONLY" = true ]   && echo -e "${BLUE}  [UPDATE mode - plugins only]${NC}"
 echo ""
 
-# Determine if running from curl or locally
-if [ -t 0 ]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Determine if running from curl or locally.
+# We're "local" when this script's sibling config/variables.sh is reachable — that's
+# more robust than the `[ -t 0 ]` heuristic (which broke under pipes, redirects, CI).
+_self_dir="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd)"
+if [ -n "$_self_dir" ] && [ -f "${_self_dir}/config/variables.sh" ]; then
+    SCRIPT_DIR="$_self_dir"
     LOCAL_MODE=true
 else
     SCRIPT_DIR="/tmp/startup_installer_$$"
@@ -74,6 +83,7 @@ else
     mkdir -p "$SCRIPT_DIR"
     cd "$SCRIPT_DIR"
 fi
+unset _self_dir
 
 # Function to source config files
 source_config() {
@@ -98,6 +108,10 @@ fi
 # Load variables and utility functions
 source_config "variables.sh"
 
+# Bootstrap Homebrew BEFORE detect_package_manager (which requires brew on macOS).
+source_config "brew.sh"
+install_homebrew
+
 # Detect package manager (will set IS_MACOS=true and PKG_MANAGER=brew)
 detect_package_manager
 check_sudo
@@ -105,20 +119,6 @@ check_sudo
 if [ "$UPDATE_ONLY" != true ]; then
     log_info "Updating Homebrew..."
     maybe_run brew update 2>/dev/null || log_warning "brew update had issues (continuing anyway)"
-
-    if ! command -v git &> /dev/null; then
-        log_info "Installing git..."
-        maybe_run brew install git || log_error "Failed to install git"
-    else
-        log_success "git is already installed"
-    fi
-
-    if ! command -v curl &> /dev/null; then
-        log_info "Installing curl..."
-        maybe_run brew install curl || log_error "Failed to install curl"
-    else
-        log_success "curl is already installed"
-    fi
 fi
 
 # Load and run module installations
@@ -127,11 +127,17 @@ log_info "Loading installation modules..."
 source_config "vim.sh"
 source_config "tmux.sh"
 source_config "zsh.sh"
-source_config "docker.sh"
+source_config "macos_defaults.sh"
+source_config "ssh.sh"
 
 # Execute installations
 echo ""
 log_info "Starting installations..."
+echo ""
+
+# Brewfile bulk-installs formulae + casks (vim, tmux, zsh, fonts).
+# The per-tool setup_X functions below are idempotent and add config + plugins.
+install_brewfile
 echo ""
 
 setup_vim
@@ -143,7 +149,10 @@ echo ""
 setup_zsh
 echo ""
 
-setup_docker
+setup_macos_defaults
+echo ""
+
+setup_ssh
 echo ""
 
 # Cleanup if running from curl
@@ -166,7 +175,7 @@ if [ "$UPDATE_ONLY" != true ]; then
     echo "  2. For Vim:   Run ':PlugInstall' inside vim if plugins didn't install"
     echo "  3. For Tmux:  Press 'prefix + I' (Ctrl+a then I) to install plugins"
     echo "  4. For Zsh:   Run 'p10k configure' to customize your prompt"
-    echo "  5. For Docker: Launch Docker Desktop from Applications"
+    echo "  5. Install Docker manually (Docker Desktop, OrbStack, Colima — your choice)"
     echo ""
     log_warning "Note: If your shell didn't change, run: chsh -s \$(which zsh)"
 fi

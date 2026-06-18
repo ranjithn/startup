@@ -48,73 +48,7 @@ configure_vim() {
     fi
 
     if [ "$needs_update" = true ]; then
-        if [ "$DRY_RUN" = true ]; then
-            log_dryrun "Would backup and deploy .vimrc"
-        else
-            backup_file "${HOME}/.vimrc"
-            if [ -n "$RAW_BASE_URL" ]; then
-                curl -fsSL "${RAW_BASE_URL}/dotfiles/.vimrc" -o "${HOME}/.vimrc" \
-                    || { log_error "Failed to download .vimrc"; return 1; }
-            else
-                cat > "${HOME}/.vimrc" << 'EOF'
-" Vim configuration
-set nocompatible
-filetype off
-
-" vim-plug plugins
-call plug#begin('~/.vim/plugged')
-Plug 'preservim/nerdtree'
-Plug 'vim-airline/vim-airline'
-Plug 'vim-airline/vim-airline-themes'
-Plug 'tpope/vim-fugitive'
-Plug 'tpope/vim-surround'
-Plug 'tpope/vim-commentary'
-Plug 'airblade/vim-gitgutter'
-call plug#end()
-
-filetype plugin indent on
-syntax on
-
-" General settings
-set number
-set relativenumber
-set ruler
-set showcmd
-set incsearch
-set hlsearch
-set ignorecase
-set smartcase
-set autoindent
-set smartindent
-set expandtab
-set tabstop=4
-set shiftwidth=4
-set softtabstop=4
-set mouse=a
-" macOS uses 'unnamed'; Linux X11 uses 'unnamedplus'; support both
-if has('mac') || has('macunix')
-    set clipboard=unnamed
-else
-    set clipboard=unnamedplus
-endif
-set cursorline
-set wildmenu
-set laststatus=2
-set encoding=utf-8
-set backspace=indent,eol,start
-
-" Theme
-set background=dark
-colorscheme desert
-
-" Key mappings
-let mapleader = ","
-nnoremap <leader>n :NERDTreeToggle<CR>
-nnoremap <leader>w :w<CR>
-nnoremap <leader>q :q<CR>
-EOF
-            fi
-        fi
+        deploy_dotfile ".vimrc" || return 1
         log_success "Vim configured successfully"
     else
         log_success "Vim is already configured (skipping)"

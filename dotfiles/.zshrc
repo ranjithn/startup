@@ -3,6 +3,11 @@ if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]
   source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
 fi
 
+# Homebrew (Apple Silicon) — put brew binaries on PATH for interactive shells
+if [[ "$(uname -s)" == "Darwin" && -x /opt/homebrew/bin/brew ]]; then
+    eval "$(/opt/homebrew/bin/brew shellenv)"
+fi
+
 # Zsh configuration with Oh My Zsh and plugins
 
 # ========================
@@ -140,11 +145,10 @@ alias tl='tmux list-sessions'
 alias tk='tmux kill-session -t'
 
 # System
-# macOS netstat uses different flags than Linux; use lsof as a cross-platform alternative
 if [[ "$(uname -s)" == "Darwin" ]]; then
     alias ports='lsof -iTCP -sTCP:LISTEN -n -P'
 else
-    alias ports='netstat -tulanp'
+    alias ports='ss -tulnp'
 fi
 alias myip='curl ifconfig.me'
 
@@ -226,6 +230,15 @@ ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor)
 # ========================
 # Additional Configuration
 # ========================
+
+# ========================
+# Auto-attach tmux on SSH login
+# ========================
+# Detaches survive disconnect. Opt out by exporting STARTUP_NO_TMUX_AUTO=1.
+if [[ -z "$TMUX" && -n "$SSH_CONNECTION" && -z "$STARTUP_NO_TMUX_AUTO" ]] \
+   && command -v tmux &>/dev/null; then
+    exec tmux new-session -A -s main
+fi
 
 # Load custom configuration if it exists
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
