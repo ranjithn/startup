@@ -1,8 +1,9 @@
 #!/bin/bash
 # macOS Development Environment Installer
-# This script installs and configures vim, tmux, zsh, and docker with good defaults and plugins
+# This script installs and configures vim, tmux, and zsh with good defaults and plugins.
+# Docker is intentionally NOT installed — install Docker Desktop / OrbStack / Colima yourself.
 #
-# Prerequisites: Homebrew must be installed (https://brew.sh)
+# Prerequisites: none — Homebrew is bootstrapped automatically if missing.
 #
 # Usage:
 #   Local:  bash macos_installer.sh [options]
@@ -126,7 +127,6 @@ log_info "Loading installation modules..."
 source_config "vim.sh"
 source_config "tmux.sh"
 source_config "zsh.sh"
-source_config "docker.sh"
 source_config "macos_defaults.sh"
 source_config "ssh.sh"
 
@@ -135,7 +135,7 @@ echo ""
 log_info "Starting installations..."
 echo ""
 
-# Brewfile bulk-installs formulae + casks (vim, tmux, zsh, docker, fonts).
+# Brewfile bulk-installs formulae + casks (vim, tmux, zsh, fonts).
 # The per-tool setup_X functions below are idempotent and add config + plugins.
 install_brewfile
 echo ""
@@ -147,9 +147,6 @@ setup_tmux
 echo ""
 
 setup_zsh
-echo ""
-
-setup_docker
 echo ""
 
 setup_macos_defaults
@@ -178,7 +175,7 @@ if [ "$UPDATE_ONLY" != true ]; then
     echo "  2. For Vim:   Run ':PlugInstall' inside vim if plugins didn't install"
     echo "  3. For Tmux:  Press 'prefix + I' (Ctrl+a then I) to install plugins"
     echo "  4. For Zsh:   Run 'p10k configure' to customize your prompt"
-    echo "  5. For Docker: Launch Docker Desktop from Applications"
+    echo "  5. Install Docker manually (Docker Desktop, OrbStack, Colima — your choice)"
     echo ""
     log_warning "Note: If your shell didn't change, run: chsh -s \$(which zsh)"
 fi

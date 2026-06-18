@@ -43,7 +43,6 @@ bash linux_installer.sh --harden-sshd        # opt into sshd hardening
 - **Vim** with vim-plug, NERDTree, vim-airline, vim-fugitive, vim-gitgutter, gruvbox, FZF, polyglot
 - **Tmux** with TPM, tmux-resurrect, tmux-continuum, tmux-yank, tmux-pain-control, true-color (`tmux-256color`)
 - **Zsh** with Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting, zsh-completions
-- **Docker** — Docker Desktop on macOS, Docker CE on Linux
 - **SSH key** — generates `~/.ssh/id_ed25519` if one is missing, fixes permissions, prints the public key for adding to GitHub / cloud providers / `authorized_keys`
 
 ### macOS-only
@@ -53,7 +52,9 @@ bash linux_installer.sh --harden-sshd        # opt into sshd hardening
 - Wires `eval "$(/opt/homebrew/bin/brew shellenv)"` into `.zshrc`.
 
 #### Brewfile (declarative package list)
-The `Brewfile` at the repo root holds the package set. Edit it freely; the installer runs `brew bundle install --file=Brewfile`. Defaults: git, curl, vim, tmux, zsh, the MesloLGS Nerd Font (for Powerlevel10k icons), and Docker Desktop.
+The `Brewfile` at the repo root holds the package set. Edit it freely; the installer runs `brew bundle install --file=Brewfile`. Defaults: git, curl, vim, tmux, zsh, and the MesloLGS Nerd Font (for Powerlevel10k icons).
+
+Docker is intentionally not managed here — install Docker Desktop, OrbStack, or Colima yourself based on your use case and licensing constraints.
 
 #### macOS system defaults (`config/macos_defaults.sh`)
 First-run only (re-entrant via marker `~/.cache/startup-macos-defaults-applied`; `--force` reapplies):
@@ -67,9 +68,10 @@ First-run only (re-entrant via marker `~/.cache/startup-macos-defaults-applied`;
 
 ### Linux-only
 
-#### Docker
+#### Docker CE
 - Installs Docker CE via the official repo (apt, dnf/yum, or pacman).
 - Enables and starts the daemon, adds the current user to the `docker` group.
+- Skipped entirely on macOS — install Docker Desktop / OrbStack / Colima yourself.
 
 #### VPS hardening (`config/linux_hardening.sh`)
 Sensible defaults for a fresh cloud machine:
@@ -152,8 +154,8 @@ The installer is safe to run multiple times. Each config module uses a marker st
 2. **Vim**: `:PlugInstall` if plugins didn't auto-install
 3. **Tmux**: `Ctrl+a I` to install plugins
 4. **Zsh**: `p10k configure` to set the prompt style (pick MesloLGS Nerd Font)
-5. **Docker macOS**: launch Docker Desktop from Applications
-6. **Docker Linux**: `newgrp docker` (or log out/in) to use docker without sudo
+5. **Docker (macOS)**: install yourself — Docker Desktop, OrbStack, or Colima
+6. **Docker (Linux)**: `newgrp docker` (or log out/in) to use docker without sudo
 7. **macOS defaults**: log out/in for key repeat changes to fully apply
 8. **SSH key**: copy the printed public key to GitHub, cloud provider, or remote `authorized_keys`
 

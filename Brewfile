@@ -13,7 +13,5 @@ brew "zsh"
 # Nerd Font for Powerlevel10k icons (selected during `p10k configure`)
 cask "font-meslo-lg-nerd-font"
 
-# Docker Desktop — provides the daemon on macOS.
-# If your org's license terms preclude Docker Desktop, comment this out
-# and use `brew install colima docker docker-compose` instead.
-cask "docker"
+# Docker is intentionally not managed here on macOS — install it yourself
+# (Docker Desktop, OrbStack, Colima, etc.) based on your licensing/use case.
