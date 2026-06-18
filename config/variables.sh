@@ -24,22 +24,36 @@ export DRY_RUN="${DRY_RUN:-false}"
 
 # Package manager detection
 detect_package_manager() {
-    if command -v apt-get &> /dev/null; then
+    if [[ "$(uname -s)" == "Darwin" ]]; then
+        if command -v brew &> /dev/null; then
+            export PKG_MANAGER="brew"
+            export PKG_UPDATE="brew update"
+            export PKG_INSTALL="brew install"
+            export IS_MACOS=true
+        else
+            echo -e "${RED}Error: Homebrew not found. Install it from https://brew.sh${NC}"
+            exit 1
+        fi
+    elif command -v apt-get &> /dev/null; then
         export PKG_MANAGER="apt-get"
         export PKG_UPDATE="apt-get update"
         export PKG_INSTALL="apt-get install -y"
+        export IS_MACOS=false
     elif command -v dnf &> /dev/null; then
         export PKG_MANAGER="dnf"
         export PKG_UPDATE="dnf check-update || true"
         export PKG_INSTALL="dnf install -y"
+        export IS_MACOS=false
     elif command -v yum &> /dev/null; then
         export PKG_MANAGER="yum"
         export PKG_UPDATE="yum check-update || true"
         export PKG_INSTALL="yum install -y"
+        export IS_MACOS=false
     elif command -v pacman &> /dev/null; then
         export PKG_MANAGER="pacman"
         export PKG_UPDATE="pacman -Sy"
         export PKG_INSTALL="pacman -S --noconfirm"
+        export IS_MACOS=false
     else
         echo -e "${RED}Error: No supported package manager found${NC}"
         exit 1
@@ -91,8 +105,12 @@ backup_file() {
 }
 
 # Check if running as root (for package installation)
+# On macOS with Homebrew, sudo is not used for package installs.
 check_sudo() {
-    if [ "$EUID" -ne 0 ]; then
+    if [ "${IS_MACOS:-false}" = true ]; then
+        # Homebrew must not be run as root; no sudo needed for brew commands
+        export SUDO=""
+    elif [ "$EUID" -ne 0 ]; then
         if ! command -v sudo &> /dev/null; then
             log_error "This script requires sudo privileges. Please run as root or install sudo."
             exit 1
