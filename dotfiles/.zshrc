@@ -231,14 +231,5 @@ ZSH_HIGHLIGHT_HIGHLIGHTERS=(main brackets pattern cursor)
 # Additional Configuration
 # ========================
 
-# ========================
-# Auto-attach tmux on SSH login
-# ========================
-# Detaches survive disconnect. Opt out by exporting STARTUP_NO_TMUX_AUTO=1.
-if [[ -z "$TMUX" && -n "$SSH_CONNECTION" && -z "$STARTUP_NO_TMUX_AUTO" ]] \
-   && command -v tmux &>/dev/null; then
-    exec tmux new-session -A -s main
-fi
-
 # Load custom configuration if it exists
 [[ -f ~/.zshrc.local ]] && source ~/.zshrc.local
