@@ -116,7 +116,7 @@ alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
 # Modern alternatives (if available)
-command -v exa &> /dev/null && alias ls='exa --icons'
+command -v eza &> /dev/null && alias ls='eza --icons'
 command -v bat &> /dev/null && alias cat='bat'
 command -v fd &> /dev/null && alias find='fd'
 command -v rg &> /dev/null && alias grep='rg'
