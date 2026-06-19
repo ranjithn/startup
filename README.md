@@ -82,9 +82,6 @@ Sensible defaults for a fresh cloud machine:
 - **`fail2ban`**: enabled with default SSH jail
 - **sshd hardening** (opt-in via `--harden-sshd`): disables root login + password authentication. Refuses to run unless `~/.ssh/authorized_keys` is populated.
 
-#### Tmux auto-attach on SSH
-When you SSH into a machine that has `.zshrc` from this repo, you're automatically attached to (or creating) tmux session `main`. Disconnect and reconnect seamlessly. Opt out by exporting `STARTUP_NO_TMUX_AUTO=1`.
-
 ## Project Structure
 
 ```
@@ -137,7 +134,6 @@ The installer is safe to run multiple times. Each config module uses a marker st
 
 - **Brewfile**: edit to taste; `brew bundle install` honors taps, formulae, casks, mas apps
 - **`~/.zshrc.local`**: sourced at the end of `.zshrc` for per-machine config that shouldn't go in the repo
-- **Opt out of tmux-on-SSH**: `export STARTUP_NO_TMUX_AUTO=1`
 - **Reapply macOS defaults**: `rm ~/.cache/startup-macos-defaults-applied && bash macos_installer.sh --force`
 
 ## Adding New Tools
