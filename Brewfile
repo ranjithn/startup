@@ -9,6 +9,13 @@ brew "curl"
 brew "vim"
 brew "tmux"
 brew "zsh"
+brew "gh"        # GitHub CLI
+
+# Modern CLI replacements — aliased in dotfiles/.zshrc when present
+brew "bat"       # cat with syntax highlighting
+brew "fd"        # fast, friendly find
+brew "ripgrep"   # fast grep (rg)
+brew "eza"       # modern ls (maintained exa fork)
 
 # Nerd Font for Powerlevel10k icons (selected during `p10k configure`)
 cask "font-meslo-lg-nerd-font"
