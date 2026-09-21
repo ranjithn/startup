@@ -7,7 +7,6 @@ call plug#begin('~/.vim/plugged')
 
 " File explorer
 Plug 'preservim/nerdtree'
-Plug 'Xuyuanp/nerdtree-git-plugin'
 
 " Status line
 Plug 'vim-airline/vim-airline'
@@ -28,7 +27,7 @@ Plug 'junegunn/fzf', { 'do': { -> fzf#install() } }
 Plug 'junegunn/fzf.vim'
 
 " Syntax highlighting
-Plug 'sheerun/vim-polyglot'
+Plug 'vim-polyglot/vim-polyglot'
 
 " Color schemes
 Plug 'morhetz/gruvbox'
@@ -66,11 +65,13 @@ set softtabstop=4               " Backspace removes 4 spaces
 
 " UI settings
 set mouse=a                     " Enable mouse support
-" macOS uses 'unnamed' (*); Linux X11 uses 'unnamedplus' (+)
-if has('mac') || has('macunix')
-    set clipboard=unnamed
-else
-    set clipboard=unnamedplus
+" Use the system clipboard only when this Vim build provides clipboard support.
+if has('clipboard')
+    if has('mac') || has('macunix')
+        set clipboard=unnamed
+    else
+        set clipboard=unnamedplus
+    endif
 endif
 set cursorline                  " Highlight current line
 set scrolloff=8                 " Keep 8 lines above/below cursor

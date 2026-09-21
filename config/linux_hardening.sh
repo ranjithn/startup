@@ -1,201 +1,262 @@
 #!/bin/bash
-# Linux VPS hardening — sensible defaults for fresh cloud machines accessed via SSH.
-# Skips all functions on macOS. Risky changes (sshd_config) gated behind
-# HARDEN_SSHD=true (set by the --harden-sshd flag).
-
-_hardening_skip() {
-    [ "${IS_MACOS:-false}" = true ]
-}
+# Linux system policy. The server profile adds UTC, low-memory swap, and
+# automatic security updates. A firewall is enabled for every profile. SSH and
+# fail2ban are configured only with --enable-ssh.
 
 set_timezone_utc() {
     [ "$UPDATE_ONLY" = true ] && return 0
-    _hardening_skip && return 0
-
-    if ! command -v timedatectl &> /dev/null; then
-        log_warning "timedatectl not available; skipping timezone setup"
-        return 0
-    fi
+    [ "$PROFILE" = server ] || return 0
+    command -v timedatectl &>/dev/null || { log_warning "timedatectl unavailable; keeping current timezone"; return 0; }
 
     local current
-    current=$(timedatectl show --property=Timezone --value 2>/dev/null)
-    if [ "$current" = "UTC" ]; then
+    current=$(timedatectl show --property=Timezone --value 2>/dev/null || true)
+    if [ "$current" = UTC ]; then
         log_success "Timezone is already UTC"
     else
-        log_info "Setting timezone to UTC..."
-        maybe_run $SUDO timedatectl set-timezone UTC 2>/dev/null \
-            || log_warning "could not set timezone"
+        run_privileged timedatectl set-timezone UTC || return 1
     fi
-
-    maybe_run $SUDO timedatectl set-ntp true 2>/dev/null \
-        || log_warning "could not enable NTP"
-    log_success "Time sync configured"
+    run_privileged timedatectl set-ntp true || log_warning "Could not enable network time synchronization"
 }
 
 setup_swap_if_low_ram() {
     [ "$UPDATE_ONLY" = true ] && return 0
-    _hardening_skip && return 0
+    [ "$PROFILE" = server ] || return 0
 
-    # Skip when swap is already present
     if [ "$(swapon --show 2>/dev/null | wc -l)" -gt 0 ]; then
-        log_success "swap already configured"
+        log_success "Swap is already configured"
         return 0
     fi
-
-    # Skip container-like environments (no permission to swapon)
     if [ -f /.dockerenv ] || grep -qE '^[0-9]+:[^:]*:.*/(docker|lxc|kubepods)' /proc/1/cgroup 2>/dev/null; then
-        log_warning "container environment detected; skipping swap setup"
+        log_warning "Container environment detected; skipping swap setup"
         return 0
     fi
 
     local ram_kb
     ram_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null)
-    [ -z "$ram_kb" ] && return 0
-
+    [ -n "$ram_kb" ] || return 0
     if [ "$ram_kb" -ge 2097152 ]; then
-        log_success "RAM is $((ram_kb / 1024)) MB; no swap created"
+        log_success "RAM is $((ram_kb / 1024)) MB; leaving distro swap/zram policy unchanged"
         return 0
     fi
 
-    log_info "Low RAM ($((ram_kb / 1024)) MB); creating 2G swap file..."
     if [ "$DRY_RUN" = true ]; then
-        log_dryrun "Would create /swapfile (2G), mkswap, swapon, append to /etc/fstab"
+        log_dryrun "Would create and persist a 2 GiB /swapfile for this low-memory server"
         return 0
     fi
-    $SUDO fallocate -l 2G /swapfile 2>/dev/null \
-        || $SUDO dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none
-    $SUDO chmod 600 /swapfile
-    $SUDO mkswap /swapfile >/dev/null
-    $SUDO swapon /swapfile
-    if ! grep -q "^/swapfile" /etc/fstab; then
-        echo '/swapfile none swap sw 0 0' | $SUDO tee -a /etc/fstab >/dev/null
+    [ ! -e /swapfile ] || { log_warning "/swapfile exists but is inactive; leaving it untouched"; return 0; }
+    run_privileged fallocate -l 2G /swapfile \
+        || run_privileged dd if=/dev/zero of=/swapfile bs=1M count=2048 status=none \
+        || return 1
+    run_privileged chmod 600 /swapfile || return 1
+    run_privileged mkswap /swapfile >/dev/null || return 1
+    run_privileged swapon /swapfile || return 1
+    if ! grep -q '^/swapfile[[:space:]]' /etc/fstab; then
+        if [ -n "${SUDO:-}" ]; then
+            printf '%s\n' '/swapfile none swap sw 0 0' | "$SUDO" tee -a /etc/fstab >/dev/null
+        else
+            printf '%s\n' '/swapfile none swap sw 0 0' >>/etc/fstab
+        fi
     fi
-    log_success "Created 2G swap at /swapfile"
+    log_success "Created 2 GiB swap file"
 }
 
 install_unattended_upgrades() {
     [ "$UPDATE_ONLY" = true ] && return 0
-    _hardening_skip && return 0
+    [ "$PROFILE" = server ] || return 0
 
     case "$PKG_MANAGER" in
         apt-get)
-            if dpkg -s unattended-upgrades &>/dev/null && [ "$FORCE_INSTALL" != true ]; then
-                log_success "unattended-upgrades already installed"
-            else
-                log_info "Installing unattended-upgrades..."
-                maybe_run $SUDO $PKG_INSTALL unattended-upgrades apt-listchanges \
-                    || { log_warning "unattended-upgrades install failed"; return 0; }
-            fi
-            maybe_run $SUDO dpkg-reconfigure -plow -fnoninteractive unattended-upgrades 2>/dev/null \
-                || log_warning "could not auto-configure unattended-upgrades"
-            log_success "unattended-upgrades enabled"
+            pkg_install unattended-upgrades apt-listchanges || return 1
+            run_privileged dpkg-reconfigure -plow -fnoninteractive unattended-upgrades \
+                || log_warning "Could not automatically configure unattended-upgrades"
             ;;
         dnf|yum)
-            if rpm -q dnf-automatic &>/dev/null && [ "$FORCE_INSTALL" != true ]; then
-                log_success "dnf-automatic already installed"
-            else
-                log_info "Installing dnf-automatic..."
-                maybe_run $SUDO $PKG_INSTALL dnf-automatic \
-                    || { log_warning "dnf-automatic install failed"; return 0; }
-            fi
+            pkg_install dnf-automatic || return 1
             if command -v systemctl &>/dev/null; then
-                maybe_run $SUDO systemctl enable --now dnf-automatic.timer 2>/dev/null \
-                    || log_warning "could not enable dnf-automatic.timer"
+                run_privileged systemctl enable --now dnf-automatic.timer || return 1
             fi
-            log_success "dnf-automatic enabled"
             ;;
-        *)
-            log_warning "auto security updates not configured for $PKG_MANAGER"
+        pacman)
+            log_warning "Automatic upgrades are not enabled on Arch; use a deliberate pacman update schedule"
             ;;
     esac
 }
 
-install_ufw() {
-    [ "$UPDATE_ONLY" = true ] && return 0
-    _hardening_skip && return 0
-
-    if ! command -v ufw &>/dev/null; then
-        log_info "Installing ufw..."
-        maybe_run $SUDO $PKG_INSTALL ufw \
-            || { log_warning "ufw install failed"; return 0; }
-    else
-        log_success "ufw already installed"
-    fi
-
+configure_ufw() {
+    pkg_install ufw || return 1
     if [ "$DRY_RUN" = true ]; then
-        log_dryrun "Would set ufw defaults, allow OpenSSH, then enable ufw"
+        log_dryrun "Would enable UFW with default-deny incoming; SSH rule: $ENABLE_SSH"
         return 0
     fi
 
-    # CRITICAL: allow SSH BEFORE enabling — otherwise we lock ourselves out
-    $SUDO ufw default deny incoming >/dev/null
-    $SUDO ufw default allow outgoing >/dev/null
-    $SUDO ufw allow OpenSSH >/dev/null 2>&1 || $SUDO ufw allow 22/tcp >/dev/null
-
-    if $SUDO ufw status | grep -q "Status: active"; then
-        log_success "ufw already active; SSH rule ensured"
+    run_privileged ufw default deny incoming >/dev/null || return 1
+    run_privileged ufw default allow outgoing >/dev/null || return 1
+    if [ "$ENABLE_SSH" = true ]; then
+        run_privileged ufw allow OpenSSH >/dev/null 2>&1 \
+            || run_privileged ufw allow 22/tcp >/dev/null \
+            || return 1
     else
-        $SUDO ufw --force enable >/dev/null
-        log_success "ufw enabled with SSH allowed"
+        run_privileged ufw delete allow OpenSSH >/dev/null 2>&1 || true
+        run_privileged ufw delete allow 22/tcp >/dev/null 2>&1 || true
+    fi
+    run_privileged ufw --force enable >/dev/null || return 1
+    log_success "UFW enabled"
+}
+
+configure_firewalld() {
+    pkg_install firewalld || return 1
+    run_privileged systemctl enable --now firewalld || return 1
+    if [ "$ENABLE_SSH" = true ]; then
+        run_privileged firewall-cmd --permanent --add-service=ssh >/dev/null || return 1
+    else
+        run_privileged firewall-cmd --permanent --remove-service=ssh >/dev/null || true
+    fi
+    run_privileged firewall-cmd --reload >/dev/null || return 1
+    log_success "firewalld enabled"
+}
+
+install_firewall() {
+    [ "$UPDATE_ONLY" = true ] && return 0
+    if [ "$DRY_RUN" != true ] && [ -n "${SSH_CONNECTION:-}" ] && [ "$ENABLE_SSH" != true ]; then
+        log_error "Refusing to enable a firewall without an SSH rule during an active SSH session"
+        log_error "Rerun with --enable-ssh after confirming how you want this server reached"
+        return 1
+    fi
+    case "$PKG_MANAGER" in
+        dnf|yum) configure_firewalld ;;
+        apt-get|pacman) configure_ufw ;;
+        *) log_error "No firewall policy for $PKG_MANAGER"; return 1 ;;
+    esac
+}
+
+install_ssh_server() {
+    [ "$ENABLE_SSH" = true ] || return 0
+    local package service
+    case "$PKG_MANAGER" in
+        apt-get) package=openssh-server; service=ssh ;;
+        dnf|yum) package=openssh-server; service=sshd ;;
+        pacman) package=openssh; service=sshd ;;
+        *) return 1 ;;
+    esac
+    pkg_install "$package" || return 1
+    if command -v systemctl &>/dev/null; then
+        run_privileged systemctl enable --now "$service" || return 1
     fi
 }
 
 install_fail2ban() {
-    [ "$UPDATE_ONLY" = true ] && return 0
-    _hardening_skip && return 0
+    [ "$ENABLE_SSH" = true ] || return 0
+    pkg_install fail2ban || return 1
 
-    if command -v fail2ban-server &>/dev/null && [ "$FORCE_INSTALL" != true ]; then
-        log_success "fail2ban already installed"
-    else
-        log_info "Installing fail2ban..."
-        maybe_run $SUDO $PKG_INSTALL fail2ban \
-            || { log_warning "fail2ban install failed"; return 0; }
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "Would enable the fail2ban sshd jail"
+        return 0
     fi
+    local jail_tmp
+    jail_tmp=$(mktemp) || return 1
+    cat >"$jail_tmp" <<'EOF'
+# Managed by ranjithn/startup
+[sshd]
+enabled = true
+EOF
+    run_privileged install -m 0644 "$jail_tmp" /etc/fail2ban/jail.d/startup-sshd.local || return 1
+    rm -f "$jail_tmp"
     if command -v systemctl &>/dev/null; then
-        maybe_run $SUDO systemctl enable --now fail2ban 2>/dev/null \
-            || log_warning "could not enable fail2ban"
+        run_privileged systemctl enable --now fail2ban || return 1
     fi
-    log_success "fail2ban running"
+}
+
+_target_home() {
+    local target_user="${SUDO_USER:-${USER:-}}"
+    getent passwd "$target_user" 2>/dev/null | awk -F: '{print $6}'
 }
 
 harden_sshd() {
-    [ "$UPDATE_ONLY" = true ] && return 0
-    _hardening_skip && return 0
-    [ "${HARDEN_SSHD:-false}" != true ] && return 0
+    [ "$ENABLE_SSH" = true ] || return 0
 
-    # Safety: refuse to disable password auth without a key already in place
-    local auth_keys="${HOME}/.ssh/authorized_keys"
-    local sudo_user_home
-    sudo_user_home=$(eval echo "~${SUDO_USER:-$USER}")
-    [ -s "${sudo_user_home}/.ssh/authorized_keys" ] || [ -s "$auth_keys" ] || {
-        log_warning "no authorized_keys present; refusing to disable password auth (would lock you out)"
-        log_warning "add your public key to ~/.ssh/authorized_keys and rerun with --harden-sshd"
-        return 0
-    }
-
-    local sshd_conf="/etc/ssh/sshd_config.d/99-startup.conf"
-    if [ "$DRY_RUN" = true ]; then
-        log_dryrun "Would write $sshd_conf disabling root login + password auth"
+    local target_home auth_keys sshd_conf config_tmp backup_tmp
+    target_home=$(_target_home)
+    auth_keys="${target_home:-$HOME}/.ssh/authorized_keys"
+    if [ ! -s "$auth_keys" ]; then
+        log_warning "No authorized_keys found at $auth_keys; leaving SSH password authentication enabled"
+        log_warning "Add and test a public key, then rerun with --enable-ssh"
         return 0
     fi
-    $SUDO mkdir -p /etc/ssh/sshd_config.d
-    $SUDO tee "$sshd_conf" >/dev/null <<'EOF'
-# Managed by ranjithn/startup. To restore defaults, delete this file.
+
+    sshd_conf=/etc/ssh/sshd_config.d/00-startup.conf
+    if [ "$DRY_RUN" = true ]; then
+        log_dryrun "Would install $sshd_conf, validate with sshd -t, then reload SSH"
+        return 0
+    fi
+
+    config_tmp=$(mktemp) || return 1
+    backup_tmp=$(mktemp) || { rm -f "$config_tmp"; return 1; }
+    cat >"$config_tmp" <<'EOF'
+# Managed by ranjithn/startup. Delete this file to restore distribution defaults.
 PermitRootLogin no
+PubkeyAuthentication yes
 PasswordAuthentication no
 KbdInteractiveAuthentication no
 ChallengeResponseAuthentication no
+PermitEmptyPasswords no
 EOF
-    $SUDO systemctl reload sshd 2>/dev/null || $SUDO systemctl reload ssh 2>/dev/null \
-        || log_warning "could not reload sshd (changes apply on next restart)"
-    log_success "sshd hardened (root login + password auth disabled)"
+    run_privileged mkdir -p /etc/ssh/sshd_config.d || return 1
+    if [ -f "$sshd_conf" ]; then
+        if [ -n "${SUDO:-}" ]; then
+            "$SUDO" cp "$sshd_conf" "$backup_tmp"
+        else
+            cp "$sshd_conf" "$backup_tmp"
+        fi
+    else
+        : >"$backup_tmp"
+    fi
+    run_privileged install -m 0644 "$config_tmp" "$sshd_conf" || return 1
+    rm -f "$config_tmp"
+
+    if ! run_privileged sshd -t; then
+        log_error "sshd validation failed; restoring the previous configuration"
+        if [ -s "$backup_tmp" ]; then
+            run_privileged install -m 0644 "$backup_tmp" "$sshd_conf"
+        else
+            run_privileged rm -f "$sshd_conf"
+        fi
+        rm -f "$backup_tmp"
+        return 1
+    fi
+
+    local effective_config
+    if [ -n "${SUDO:-}" ]; then
+        effective_config=$("$SUDO" sshd -T 2>/dev/null) || effective_config=""
+    else
+        effective_config=$(sshd -T 2>/dev/null) || effective_config=""
+    fi
+    if ! grep -qx 'passwordauthentication no' <<<"$effective_config" \
+        || ! grep -qx 'permitrootlogin no' <<<"$effective_config"; then
+        log_error "The sshd drop-in is not effective; restoring the previous configuration"
+        if [ -s "$backup_tmp" ]; then
+            run_privileged install -m 0644 "$backup_tmp" "$sshd_conf"
+        else
+            run_privileged rm -f "$sshd_conf"
+        fi
+        rm -f "$backup_tmp"
+        return 1
+    fi
+    rm -f "$backup_tmp"
+    run_privileged systemctl reload sshd 2>/dev/null \
+        || run_privileged systemctl reload ssh 2>/dev/null \
+        || { log_error "Could not reload SSH"; return 1; }
+    log_success "SSH hardened after successful configuration validation"
 }
 
 setup_linux_hardening() {
-    _hardening_skip && return 0
-    set_timezone_utc
-    setup_swap_if_low_ram
-    install_unattended_upgrades
-    install_ufw
-    install_fail2ban
-    harden_sshd
+    set_timezone_utc || return 1
+    setup_swap_if_low_ram || return 1
+    install_unattended_upgrades || return 1
+    install_firewall || return 1
+    install_ssh_server || return 1
+    install_fail2ban || return 1
+    harden_sshd || return 1
+    if [ "$WITH_DOCKER" = true ]; then
+        log_warning "Docker-published ports may bypass UFW rules; bind services deliberately"
+    fi
 }
