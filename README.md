@@ -1,175 +1,162 @@
 # Startup Scripts
 
-Modular installer scripts for setting up a development environment on a fresh machine. Two flows:
+Re-entrant setup scripts for a personal Ubuntu/Linux server and an Apple Silicon Mac. Linux defaults to a conservative **server** profile. Docker, an SSH server, and client SSH key generation are explicit opt-ins.
 
-- **macOS** — typically used when reinstalling your own Mac. Bootstraps Homebrew, installs packages from a `Brewfile`, applies `defaults write` for keyboard / Finder / Dock / screenshots, generates an SSH key.
-- **Linux** — typically used when provisioning a fresh cloud VPS that you'll access via SSH. Installs the same dev tools, hardens the host (timezone, swap, unattended-upgrades, ufw, fail2ban), and optionally locks down `sshd`.
+## Recommended Linux Setup
 
-Both flows share the same modular config under `config/` and the same dotfiles under `dotfiles/`.
-
-## Quick Start
+Clone and inspect the repository before running it:
 
 ```bash
-# macOS (fresh Apple Silicon Mac — bootstraps Homebrew automatically)
-curl -fsSL https://raw.githubusercontent.com/ranjithn/startup/refs/heads/master/macos_installer.sh | bash
-
-# Linux (cloud VPS via SSH)
-curl -fsSL https://raw.githubusercontent.com/ranjithn/startup/refs/heads/master/linux_installer.sh | bash
-
-# Local (after cloning)
-git clone https://github.com/ranjithn/startup.git && cd startup
-bash macos_installer.sh    # or linux_installer.sh
+git clone https://github.com/ranjithn/startup.git
+cd startup
+bash linux_installer.sh --dry-run
+bash linux_installer.sh
 ```
 
-## CLI Flags
-
-| Flag             | What it does                                                                                                |
-|------------------|-------------------------------------------------------------------------------------------------------------|
-| `--force`        | Reinstall everything, even if already present                                                              |
-| `--update`       | Update plugins only (`git pull` + `PlugUpdate`/TPM update); skips package installs and config deployment    |
-| `--dry-run`      | Print what would be done without making any changes                                                         |
-| `--harden-sshd`  | **(Linux only)** Disable root login and password authentication in `sshd_config`. Refuses to run if `~/.ssh/authorized_keys` is empty — protects against locking yourself out. |
+For a server that should accept SSH connections:
 
 ```bash
-bash linux_installer.sh --dry-run            # preview changes
-bash macos_installer.sh --update             # pull latest plugin updates
-bash linux_installer.sh --force              # full reinstall
-bash linux_installer.sh --harden-sshd        # opt into sshd hardening
+bash linux_installer.sh --enable-ssh
 ```
 
-## What Gets Installed
+`--enable-ssh` installs and starts OpenSSH, opens only its firewall service, enables fail2ban, and disables password/root login **only after** a non-empty `authorized_keys` is present. The generated sshd drop-in is checked with `sshd -t` before SSH is reloaded.
 
-### Shared (macOS + Linux)
-- **Vim** with vim-plug, NERDTree, vim-airline, vim-fugitive, vim-gitgutter, gruvbox, FZF, polyglot
-- **Tmux** with TPM, tmux-resurrect, tmux-continuum, tmux-yank, tmux-pain-control, true-color (`tmux-256color`)
-- **Zsh** with Oh My Zsh, Powerlevel10k, zsh-autosuggestions, zsh-syntax-highlighting, zsh-completions
-- **SSH key** — generates `~/.ssh/id_ed25519` if one is missing, fixes permissions, prints the public key for adding to GitHub / cloud providers / `authorized_keys`
+If the installer detects an active SSH session, it refuses to enable the firewall without `--enable-ssh` rather than risk locking you out.
 
-### macOS-only
+### Linux options
 
-#### Homebrew bootstrap
-- Installs Homebrew at `/opt/homebrew` (Apple Silicon only — this repo does not target Intel Macs).
-- Wires `eval "$(/opt/homebrew/bin/brew shellenv)"` into `.zshrc`.
+| Option | Behavior |
+|---|---|
+| `--profile server` | Default. UTC/NTP, low-memory swap policy, unattended security updates, and firewall |
+| `--profile workstation` | Package and firewall setup without changing timezone/swap or enabling unattended upgrades |
+| `--enable-ssh` | Install/enable OpenSSH, permit it through the firewall, enable fail2ban, and harden when authorized keys permit |
+| `--with-docker` | Install Docker Engine from the correct official Debian/Ubuntu/Fedora/CentOS-family repository |
+| `--docker-group` | Also install Docker and add the user to the root-equivalent `docker` group |
+| `--generate-ssh-key` | Interactively create a passphrase-protected Ed25519 client key when one does not exist |
+| `--force` | Reinstall/redeploy managed components; existing SSH identity keys are still preserved |
+| `--update` | Update user plugins only; do not change packages or system policy |
+| `--dry-run` | Print intended commands without changing the machine |
 
-#### Brewfile (declarative package list)
-The `Brewfile` at the repo root holds the package set. Edit it freely; the installer runs `brew bundle install --file=Brewfile`. Defaults: git, curl, vim, tmux, zsh, and the MesloLGS Nerd Font (for Powerlevel10k icons).
+Docker is disabled by default. Without `--docker-group`, use `sudo docker` or configure rootless Docker. Docker-published ports can bypass UFW expectations, so bind published services deliberately.
 
-Docker is intentionally not managed here — install Docker Desktop, OrbStack, or Colima yourself based on your use case and licensing constraints.
+## Linux Packages
 
-#### macOS system defaults (`config/macos_defaults.sh`)
-First-run only (re-entrant via marker `~/.cache/startup-macos-defaults-applied`; `--force` reapplies):
-- **Keyboard**: fast key repeat (`KeyRepeat=2`, `InitialKeyRepeat=15`), disable press-and-hold accent picker
-- **Finder**: show all files, show extensions, path bar + status bar, POSIX path in title bar, search current folder
-- **Screenshots**: saved to `~/Pictures/Screenshots` as PNG, no shadow
-- **Dock**: autohide with no delay, hide recents, scale minimize effect
-- **No `.DS_Store`** on network or USB volumes
+The distro-aware baseline includes:
 
-> ⚠️ Some changes (key repeat especially) need a logout/login to take effect fully.
+- `curl`, CA certificates, and OpenSSH client tools
+- Vim, tmux, and zsh
+- ripgrep, fd, bat, eza, fzf, and jq
+- unzip and rsync
+- ShellCheck and shfmt
+- compiler/build tooling
 
-### Linux-only
+Unavailable packages are reported and skipped individually. Debian/Ubuntu command names such as `fdfind` and `batcat` receive user-local `fd` and `bat` symlinks.
 
-#### Docker CE
-- Installs Docker CE via the official repo (apt, dnf/yum, or pacman).
-- Enables and starts the daemon, adds the current user to the `docker` group.
-- Skipped entirely on macOS — install Docker Desktop / OrbStack / Colima yourself.
+Git, GitHub CLI, and Git LFS are intentionally not installed on Linux. Git-backed Vim, tmux, Oh My Zsh, and Zsh plugin installation is skipped with a warning when Git is absent; the base packages and dotfiles still install.
 
-#### VPS hardening (`config/linux_hardening.sh`)
-Sensible defaults for a fresh cloud machine:
-- **Timezone**: set to UTC (idempotent) + enable NTP
-- **Swap**: creates `/swapfile` (2G) when RAM < 2 GB and no swap exists; skipped in containers
-- **Unattended security upgrades**: `unattended-upgrades` (Debian/Ubuntu) or `dnf-automatic` (Fedora)
-- **Firewall**: `ufw default deny incoming → allow OpenSSH → enable` (SSH allowed *before* enable, so you don't lock yourself out)
-- **`fail2ban`**: enabled with default SSH jail
-- **sshd hardening** (opt-in via `--harden-sshd`): disables root login + password authentication. Refuses to run unless `~/.ssh/authorized_keys` is populated.
+Supported package families are apt (Ubuntu/Debian), dnf/yum (Fedora and CentOS-compatible distributions), and pacman (Arch). Ubuntu is the primary target.
+
+## macOS
+
+Apple Silicon only:
+
+```bash
+bash macos_installer.sh --dry-run
+bash macos_installer.sh
+```
+
+The macOS flow bootstraps Homebrew, applies the root `Brewfile`, deploys the same shell/editor configuration, and applies Finder/Dock/keyboard defaults. Docker remains a manual choice on macOS.
+
+## Remote Bootstrap
+
+Executing mutable `master` content directly is convenient but less safe than cloning and reviewing it. If remote bootstrap is necessary, pin both the entry script and downloaded modules to the same commit:
+
+```bash
+REF='<full-commit-sha>'
+curl -fsSL "https://raw.githubusercontent.com/ranjithn/startup/$REF/linux_installer.sh" \
+  | GITHUB_REF="$REF" bash -s -- --dry-run --enable-ssh
+```
+
+Remove `--dry-run` only after reviewing the output. A branch or tag also works as `GITHUB_REF`, but a full commit SHA is immutable.
+
+## System Policy
+
+### Firewall
+
+- Ubuntu/Debian/Arch: UFW with default-deny incoming and allow outgoing.
+- Fedora/CentOS family: firewalld.
+- SSH is not opened unless `--enable-ssh` is supplied.
+- Existing broad SSH allow rules are removed when SSH is not enabled.
+
+### Server profile
+
+- Sets UTC and enables network time synchronization.
+- Creates a 2 GiB swap file only below 2 GiB RAM, when no swap exists and the host is not a container.
+- Enables unattended security updates on apt/dnf systems.
+- Leaves systems with at least 2 GiB RAM to their distribution's swap/zram policy.
+
+### SSH identities
+
+Client key generation is never implicit and `--force` never rotates an identity. `--generate-ssh-key` uses Ed25519 with strengthened key derivation and prompts for a passphrase.
+
+## Managed Dotfiles
+
+Managed files are deployed atomically:
+
+- `~/.vimrc`
+- `~/.tmux.conf`
+- `~/.zshrc`
+
+Their hashes are stored under `${XDG_STATE_HOME:-~/.local/state}/startup`. Unchanged managed files automatically receive repository updates. Locally modified files are backed up to `~/.dotfiles_backup_<timestamp>/` before the managed version is installed. Failed downloads leave the active file untouched.
+
+Use `~/.zshrc.local` for machine-specific shell configuration that should not be replaced.
+
+## Editor and Shell Notes
+
+- Vim uses vim-plug and the maintained canonical `vim-polyglot/vim-polyglot` repository.
+- The archived `nerdtree-git-plugin` is no longer installed.
+- Modern commands retain their real names; `cat`, `find`, and `grep` are not replaced with incompatible aliases.
+- Locale configuration preserves a valid system locale and does not force `LC_ALL`.
+- Tmux uses OSC 52 clipboard support; no X11 or Wayland clipboard packages are installed.
+- Failure to run `chsh` only prints manual instructions; the installer never appends an unconditional `exec zsh` to `.bashrc`.
+
+## Updating
+
+```bash
+bash linux_installer.sh --update
+```
+
+This updates Vim, tmux, Oh My Zsh, and Zsh plugins when their Git checkouts and Git itself are available. Distribution package upgrades are intentionally left to the OS update policy rather than hidden behind this flag.
+
+## Testing
+
+```bash
+bash test/test_reentrant.sh
+```
+
+The test uses an isolated temporary `HOME`. It verifies atomic/hash-managed deployment, local-edit backups, failed-download preservation, dry-run behavior, package command arrays, dnf's special update status, Docker distro mapping, and shell syntax.
 
 ## Project Structure
 
-```
+```text
 startup/
-├── macos_installer.sh         # macOS entry point (bootstraps Homebrew, runs Brewfile)
-├── linux_installer.sh         # Linux entry point
-├── Brewfile                   # Declarative package list for macOS
+├── linux_installer.sh
+├── macos_installer.sh
+├── Brewfile
 ├── config/
-│   ├── variables.sh           # Shared flags, package manager detection, deploy_dotfile helper
-│   ├── brew.sh                # Homebrew bootstrap + brew bundle install
+│   ├── variables.sh
+│   ├── packages.sh
 │   ├── vim.sh
 │   ├── tmux.sh
 │   ├── zsh.sh
 │   ├── docker.sh
-│   ├── ssh.sh                 # ed25519 key generation + permission fixes
-│   ├── macos_defaults.sh      # `defaults write` for Finder/Dock/keyboard
-│   └── linux_hardening.sh     # timezone/swap/ufw/fail2ban/unattended-upgrades/sshd
+│   ├── ssh.sh
+│   ├── linux_hardening.sh
+│   ├── brew.sh
+│   └── macos_defaults.sh
 ├── dotfiles/
-│   ├── .vimrc
-│   ├── .tmux.conf
-│   └── .zshrc
-└── test/
-    └── test_reentrant.sh
+└── test/test_reentrant.sh
 ```
-
-## Re-entrancy
-
-The installer is safe to run multiple times. Each config module uses a marker string (or marker file for macOS defaults) to detect whether it's already managed:
-
-| Tool             | Marker                                          |
-|------------------|-------------------------------------------------|
-| Vim              | `call plug#begin` in `~/.vimrc`                 |
-| Tmux             | `tmux-plugins/tpm` in `~/.tmux.conf`            |
-| Zsh              | `oh-my-zsh` in `~/.zshrc`                       |
-| Brewfile         | `brew bundle` is itself idempotent              |
-| macOS defaults   | `~/.cache/startup-macos-defaults-applied`       |
-| SSH key          | presence of `~/.ssh/id_ed25519`                 |
-| ufw / fail2ban   | systemd unit state + presence of binary         |
-
-**On each run:**
-- Already-installed packages are skipped
-- Managed dotfiles are preserved; unmanaged ones are backed up to `~/.dotfiles_backup_<timestamp>/` before overwrite
-- Plugins are only installed/updated when the config is new or changed (or with `--update` / `--force`)
-- Failures are non-fatal — the script logs a warning and continues
-
-**Status messages:**
-- `[SUCCESS]` (green), `[INFO]` (blue), `[WARNING]` (yellow), `[ERROR]` (red), `[DRY-RUN]` (yellow)
-
-## Customization
-
-- **Brewfile**: edit to taste; `brew bundle install` honors taps, formulae, casks, mas apps
-- **`~/.zshrc.local`**: sourced at the end of `.zshrc` for per-machine config that shouldn't go in the repo
-- **Reapply macOS defaults**: `rm ~/.cache/startup-macos-defaults-applied && bash macos_installer.sh --force`
-
-## Adding New Tools
-
-1. Create `config/newtool.sh` with `install_newtool`, `configure_newtool`, and `setup_newtool` functions
-2. Source and call it from `linux_installer.sh` and/or `macos_installer.sh`
-3. Add the dotfile to `dotfiles/` and reference it via `deploy_dotfile ".newtoolrc"` in `configure_newtool`
-4. Add a marker-string re-entrancy check in `configure_newtool`
-5. (macOS-only tool) add the package to `Brewfile` instead of an ad-hoc `brew install`
-
-## Post-Installation
-
-1. Restart your terminal or run `source ~/.zshrc`
-2. **Vim**: `:PlugInstall` if plugins didn't auto-install
-3. **Tmux**: `Ctrl+a I` to install plugins
-4. **Zsh**: `p10k configure` to set the prompt style (pick MesloLGS Nerd Font)
-5. **Docker (macOS)**: install yourself — Docker Desktop, OrbStack, or Colima
-6. **Docker (Linux)**: `newgrp docker` (or log out/in) to use docker without sudo
-7. **macOS defaults**: log out/in for key repeat changes to fully apply
-8. **SSH key**: copy the printed public key to GitHub, cloud provider, or remote `authorized_keys`
-
-## Requirements
-
-- **macOS**: Apple Silicon (arm64) only. Fresh install is fine — Homebrew is bootstrapped automatically.
-- **Linux**: Ubuntu, Debian, Fedora, CentOS, Arch. `sudo` access. `curl` and `git` install themselves if missing.
-- **Network**: required for downloading plugins, packages, dotfiles
-
-## Troubleshooting
-
-- **Shell didn't change**: `chsh -s $(which zsh)`
-- **Vim plugins missing**: open vim and run `:PlugInstall`
-- **Tmux plugins missing**: in tmux, press `Ctrl+a I`
-- **Docker permission denied (Linux)**: run `newgrp docker` or log out and back in
-- **macOS key repeat still slow**: log out and back in (system caches the values)
-- **`ufw` locked me out**: log in via the cloud provider's console and `sudo ufw disable`
-- **`tmux-256color` missing**: install the terminfo entry (`tic`) or fall back to `screen-256color` in `~/.tmux.conf`
 
 ## License
 

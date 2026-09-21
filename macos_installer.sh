@@ -7,13 +7,14 @@
 #
 # Usage:
 #   Local:  bash macos_installer.sh [options]
-#   Remote: curl -fsSL https://raw.githubusercontent.com/ranjithn/startup/refs/heads/master/macos_installer.sh | bash
+#   Remote: pin GITHUB_REF and the script URL to the same commit; see README.md
 #
 # Options:
 #   --force    Reinstall everything, even if already present
 #   --update   Update plugins only, skip package installs and configs
-#   --dry-run  Show what would be done without making changes
-#   -h, --help Show this help message
+#   --dry-run          Show what would be done without making changes
+#   --generate-ssh-key Interactively generate a client SSH key if missing
+#   -h, --help         Show this help message
 
 # Colors for output
 RED='\033[0;31m'
@@ -36,20 +37,23 @@ fi
 FORCE_INSTALL=false
 UPDATE_ONLY=false
 DRY_RUN=false
+GENERATE_SSH_KEY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --force)   FORCE_INSTALL=true ;;
         --update)  UPDATE_ONLY=true ;;
-        --dry-run) DRY_RUN=true ;;
+        --dry-run)          DRY_RUN=true ;;
+        --generate-ssh-key) GENERATE_SSH_KEY=true ;;
         -h|--help)
             echo "Usage: $0 [options]"
             echo ""
             echo "Options:"
             echo "  --force    Reinstall everything, even if already present"
             echo "  --update   Update plugins only, skip package installs and configs"
-            echo "  --dry-run  Show what would be done without making changes"
-            echo "  -h, --help Show this help message"
+            echo "  --dry-run          Show what would be done without making changes"
+            echo "  --generate-ssh-key Interactively generate a client SSH key if missing"
+            echo "  -h, --help         Show this help message"
             exit 0
             ;;
         *)
@@ -60,7 +64,7 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
-export FORCE_INSTALL UPDATE_ONLY DRY_RUN
+export FORCE_INSTALL UPDATE_ONLY DRY_RUN GENERATE_SSH_KEY
 
 echo -e "${BLUE}======================================${NC}"
 echo -e "${BLUE}  macOS Development Environment Setup${NC}"
@@ -81,7 +85,6 @@ else
     SCRIPT_DIR="/tmp/startup_installer_$$"
     LOCAL_MODE=false
     mkdir -p "$SCRIPT_DIR"
-    cd "$SCRIPT_DIR"
 fi
 unset _self_dir
 
@@ -89,10 +92,12 @@ unset _self_dir
 source_config() {
     local config_file=$1
     if [ "$LOCAL_MODE" = true ]; then
+        # shellcheck disable=SC1090
         source "${SCRIPT_DIR}/config/${config_file}"
     else
         local url="${RAW_BASE_URL}/config/${config_file}"
-        curl -fsSL "$url" -o "${SCRIPT_DIR}/${config_file}"
+        curl -fsSL "$url" -o "${SCRIPT_DIR}/${config_file}" || return 1
+        # shellcheck disable=SC1090
         source "${SCRIPT_DIR}/${config_file}"
     fi
 }
@@ -101,20 +106,19 @@ source_config() {
 if [ "$LOCAL_MODE" = false ]; then
     export GITHUB_USER="${GITHUB_USER:-ranjithn}"
     export GITHUB_REPO="${GITHUB_REPO:-startup}"
-    export GITHUB_BRANCH="${GITHUB_BRANCH:-master}"
-    export RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/refs/heads/${GITHUB_BRANCH}"
+    export GITHUB_REF="${GITHUB_REF:-${GITHUB_BRANCH:-master}}"
+    export RAW_BASE_URL="https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/${GITHUB_REF}"
 fi
 
 # Load variables and utility functions
-source_config "variables.sh"
+source_config "variables.sh" || exit 1
 
-# Bootstrap Homebrew BEFORE detect_package_manager (which requires brew on macOS).
-source_config "brew.sh"
-install_homebrew
+# Bootstrap Homebrew BEFORE package manager detection.
+source_config "brew.sh" || exit 1
+install_homebrew || exit 1
 
-# Detect package manager (will set IS_MACOS=true and PKG_MANAGER=brew)
-detect_package_manager
-check_sudo
+detect_package_manager || exit 1
+check_sudo || exit 1
 
 if [ "$UPDATE_ONLY" != true ]; then
     log_info "Updating Homebrew..."
@@ -124,50 +128,46 @@ fi
 # Load and run module installations
 log_info "Loading installation modules..."
 
-source_config "vim.sh"
-source_config "tmux.sh"
-source_config "zsh.sh"
-source_config "macos_defaults.sh"
-source_config "ssh.sh"
+for module in vim.sh tmux.sh zsh.sh macos_defaults.sh ssh.sh; do
+    source_config "$module" || exit 1
+done
 
-# Execute installations
-echo ""
-log_info "Starting installations..."
-echo ""
+FAILED_STEPS=()
+run_step() {
+    local name=$1
+    shift
+    echo
+    log_info "$name"
+    if ! "$@"; then
+        FAILED_STEPS+=("$name")
+        log_error "$name failed"
+    fi
+}
 
-# Brewfile bulk-installs formulae + casks (vim, tmux, zsh, fonts).
-# The per-tool setup_X functions below are idempotent and add config + plugins.
-install_brewfile
-echo ""
-
-setup_vim
-echo ""
-
-setup_tmux
-echo ""
-
-setup_zsh
-echo ""
-
-setup_macos_defaults
-echo ""
-
-setup_ssh
-echo ""
+run_step "Brewfile packages" install_brewfile
+run_step "Vim" setup_vim
+run_step "Tmux" setup_tmux
+run_step "Zsh" setup_zsh
+run_step "macOS defaults" setup_macos_defaults
+run_step "SSH client key" setup_ssh
 
 # Cleanup if running from curl
 if [ "$LOCAL_MODE" = false ]; then
-    cd /tmp
     rm -rf "$SCRIPT_DIR"
 fi
 
 # Final message
-echo ""
+echo
+if [ "${#FAILED_STEPS[@]}" -gt 0 ]; then
+    echo -e "${RED}======================================${NC}"
+    echo -e "${RED}  Installation completed with errors${NC}"
+    printf '  - %s\n' "${FAILED_STEPS[@]}"
+    exit 1
+fi
+
 echo -e "${GREEN}======================================${NC}"
-echo -e "${GREEN}  Installation Complete!${NC}"
+echo -e "${GREEN}  Installation complete${NC}"
 echo -e "${GREEN}======================================${NC}"
-echo ""
-log_success "All tools have been installed and configured"
 
 if [ "$UPDATE_ONLY" != true ]; then
     log_info "Next steps:"

@@ -53,7 +53,9 @@ plugins=(
 # Load Oh My Zsh
 # ========================
 
-source $ZSH/oh-my-zsh.sh
+if [[ -r "$ZSH/oh-my-zsh.sh" ]]; then
+    source "$ZSH/oh-my-zsh.sh"
+fi
 
 # ========================
 # User Configuration
@@ -63,9 +65,14 @@ source $ZSH/oh-my-zsh.sh
 export EDITOR='vim'
 export VISUAL='vim'
 
-# Language environment
-export LANG=en_US.UTF-8
-export LC_ALL=en_US.UTF-8
+# Use a UTF-8 locale without overriding an existing valid system choice.
+if [[ -z "${LANG:-}" || "$LANG" == "C" || "$LANG" == "POSIX" ]]; then
+    if locale -a 2>/dev/null | grep -qi '^C\.utf-8$'; then
+        export LANG=C.UTF-8
+    elif locale -a 2>/dev/null | grep -qi '^en_US\.utf-8$'; then
+        export LANG=en_US.UTF-8
+    fi
+fi
 
 # ========================
 # History Settings
@@ -115,11 +122,9 @@ alias grep='grep --color=auto'
 alias fgrep='fgrep --color=auto'
 alias egrep='egrep --color=auto'
 
-# Modern alternatives (if available)
-command -v eza &> /dev/null && alias ls='eza --icons'
-command -v bat &> /dev/null && alias cat='bat'
-command -v fd &> /dev/null && alias find='fd'
-command -v rg &> /dev/null && alias grep='rg'
+# Modern tools keep distinct names because they are not drop-in compatible.
+command -v eza &> /dev/null && alias lse='eza --icons'
+command -v bat &> /dev/null && alias bcat='bat'
 
 # Git aliases
 alias gs='git status'
@@ -150,7 +155,7 @@ if [[ "$(uname -s)" == "Darwin" ]]; then
 else
     alias ports='ss -tulnp'
 fi
-alias myip='curl ifconfig.me'
+alias myip='curl -fsS https://ifconfig.me'
 
 # ========================
 # Functions
@@ -163,23 +168,24 @@ mkcd() {
 
 # Extract archives
 extract() {
-    if [ -f $1 ]; then
-        case $1 in
-            *.tar.bz2)   tar xjf $1     ;;
-            *.tar.gz)    tar xzf $1     ;;
-            *.bz2)       bunzip2 $1     ;;
-            *.rar)       unrar e $1     ;;
-            *.gz)        gunzip $1      ;;
-            *.tar)       tar xf $1      ;;
-            *.tbz2)      tar xjf $1     ;;
-            *.tgz)       tar xzf $1     ;;
-            *.zip)       unzip $1       ;;
-            *.Z)         uncompress $1  ;;
-            *.7z)        7z x $1        ;;
-            *)           echo "'$1' cannot be extracted via extract()" ;;
+    local archive=${1:-}
+    if [[ -f "$archive" ]]; then
+        case "$archive" in
+            *.tar.bz2) tar xjf "$archive" ;;
+            *.tar.gz)  tar xzf "$archive" ;;
+            *.bz2)     bunzip2 "$archive" ;;
+            *.rar)     unrar e "$archive" ;;
+            *.gz)      gunzip "$archive" ;;
+            *.tar)     tar xf "$archive" ;;
+            *.tbz2)    tar xjf "$archive" ;;
+            *.tgz)     tar xzf "$archive" ;;
+            *.zip)     unzip "$archive" ;;
+            *.Z)       uncompress "$archive" ;;
+            *.7z)      7z x "$archive" ;;
+            *)         echo "'$archive' cannot be extracted via extract()" ;;
         esac
     else
-        echo "'$1' is not a valid file"
+        echo "'$archive' is not a valid file"
     fi
 }
 

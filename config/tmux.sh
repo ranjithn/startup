@@ -1,77 +1,54 @@
 #!/bin/bash
-# Tmux installation and configuration
+# Tmux installation and configuration. Clipboard integration uses OSC 52;
+# no X11 or Wayland packages are installed on server systems.
 
 install_tmux() {
     [ "$UPDATE_ONLY" = true ] && return 0
     log_info "Installing Tmux..."
 
-    if command -v tmux &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
+    if command -v tmux &>/dev/null && [ "$FORCE_INSTALL" != true ]; then
         log_success "Tmux is already installed"
-    elif [ "${IS_MACOS:-false}" = true ]; then
-        maybe_run brew install tmux || { log_error "Failed to install tmux"; return 1; }
-        log_success "Tmux installed successfully"
-    else
-        maybe_run $SUDO $PKG_INSTALL tmux || { log_error "Failed to install tmux"; return 1; }
-        log_success "Tmux installed successfully"
+        return 0
     fi
-
-    # Install clipboard support for tmux-yank
-    if [ "${IS_MACOS:-false}" = true ]; then
-        # macOS has pbcopy/pbpaste built in; tmux-yank uses them natively on macOS 10.12+
-        log_success "macOS clipboard (pbcopy/pbpaste) is available for tmux-yank"
-    else
-        # Linux: install xclip for X11 clipboard support
-        if command -v xclip &> /dev/null && [ "$FORCE_INSTALL" != true ]; then
-            log_success "xclip is already installed"
-        else
-            log_info "Installing xclip (needed by tmux-yank)..."
-            maybe_run $SUDO $PKG_INSTALL xclip || log_warning "Failed to install xclip — tmux-yank copy to clipboard won't work"
-        fi
-    fi
+    pkg_install tmux || { log_error "Failed to install tmux"; return 1; }
+    log_success "Tmux installed successfully"
 }
 
 configure_tmux() {
     local tpm_path="${HOME}/.tmux/plugins/tpm"
 
-    # Update mode: only update plugins
     if [ "$UPDATE_ONLY" = true ]; then
         if [ -d "$tpm_path" ]; then
+            command -v git &>/dev/null || {
+                log_warning "Git is not installed; Tmux plugins cannot be updated"
+                return 0
+            }
             log_info "Updating Tmux plugins..."
             maybe_run "${tpm_path}/bin/update_plugins" all 2>/dev/null \
-                || log_warning "Tmux plugin update failed (press 'Ctrl+a U' in tmux)"
+                || log_warning "Tmux plugin update failed"
         fi
         return 0
     fi
 
     log_info "Configuring Tmux..."
-
-    # Install TPM (Tmux Plugin Manager)
-    if [ ! -d "$tpm_path" ] || [ "$FORCE_INSTALL" = true ]; then
-        log_info "Installing TPM (Tmux Plugin Manager)..."
-        maybe_run git clone https://github.com/tmux-plugins/tpm "$tpm_path" 2>/dev/null \
+    if [ -d "$tpm_path" ]; then
+        if [ "$FORCE_INSTALL" = true ] && command -v git &>/dev/null; then
+            maybe_run git -C "$tpm_path" pull --ff-only 2>/dev/null \
+                || log_warning "TPM update failed"
+        else
+            log_success "TPM is already installed"
+        fi
+    elif ! command -v git &>/dev/null; then
+        log_warning "Git is not installed; skipping TPM and Tmux plugins"
+    else
+        log_info "Installing TPM..."
+        maybe_run git clone --depth=1 https://github.com/tmux-plugins/tpm "$tpm_path" 2>/dev/null \
             || log_warning "TPM installation failed"
-    else
-        log_success "TPM is already installed"
     fi
 
-    # Check if .tmux.conf needs updating
-    local needs_update=false
-    if [ "$FORCE_INSTALL" = true ]; then
-        needs_update=true
-    elif [ ! -f "${HOME}/.tmux.conf" ]; then
-        needs_update=true
-    elif ! grep -q "tmux-plugins/tpm" "${HOME}/.tmux.conf" 2>/dev/null; then
-        needs_update=true
-    fi
+    deploy_dotfile .tmux.conf || return 1
 
-    if [ "$needs_update" = true ]; then
-        deploy_dotfile ".tmux.conf" || return 1
-        log_success "Tmux configured successfully"
-    else
-        log_success "Tmux is already configured (skipping)"
-    fi
-
-    if [ -d "$tpm_path" ] && [ "$needs_update" = true ]; then
+    if [ -d "$tpm_path" ] && { [ "$DEPLOY_CHANGED" = true ] || [ "$FORCE_INSTALL" = true ]; }; then
         log_info "Installing Tmux plugins..."
         maybe_run "${tpm_path}/bin/install_plugins" 2>/dev/null \
             || log_warning "Tmux plugin installation failed (press 'Ctrl+a I' in tmux)"
@@ -79,6 +56,6 @@ configure_tmux() {
 }
 
 setup_tmux() {
-    install_tmux
+    install_tmux || return 1
     configure_tmux
 }
